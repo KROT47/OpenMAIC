@@ -353,6 +353,7 @@ const DEFAULT_FILENAME = 'server-providers.yml';
 const OPENAI_IMAGE_PROVIDER_ID = 'openai-image';
 const ALIDOCMIND_PROVIDER_ID = 'alidocmind';
 const BEDROCK_PROVIDER_ID = 'bedrock';
+const NATIVE_CODEX_PROVIDER_ID = 'openai-codex';
 
 /** Cache keyed by YAML filename (empty string = default file). */
 const _configs: Map<string, ServerConfig> = new Map();
@@ -508,6 +509,10 @@ function buildConfig(yamlData: YamlData): ServerConfig {
     }),
     yamlData.providers,
   );
+
+  // Native Codex OAuth owns this ID. Generic YAML/env credentials must never
+  // turn it into a client-overridable OpenAI-compatible provider.
+  delete providers[NATIVE_CODEX_PROVIDER_ID];
 
   return {
     providers,

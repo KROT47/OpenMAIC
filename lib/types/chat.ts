@@ -7,7 +7,7 @@
 
 import type { UIMessage } from 'ai';
 import type { CleanupSource } from '@/lib/playback/auto-resume';
-import type { ThinkingConfig } from './provider';
+import type { ModelServiceTier, ThinkingConfig } from './provider';
 
 // Session Types
 export type SessionType = 'qa' | 'discussion' | 'lecture';
@@ -18,6 +18,8 @@ export type SessionStatus =
   | 'interrupted'
   | 'completed'
   | 'error';
+
+export type StatelessChatSessionContext = { kind: 'chat'; id: string };
 
 /**
  * Metadata attached to chat messages
@@ -318,6 +320,8 @@ export interface SlideElementReference {
  * All state is sent from the client on each request
  */
 export interface StatelessChatRequest {
+  /** Stable local lifecycle identity; the server derives an opaque Codex cache identity. */
+  session?: StatelessChatSessionContext;
   /** Conversation history (client-maintained) */
   messages: UIMessage<ChatMessageMetadata>[];
   /** Current application state */
@@ -415,6 +419,8 @@ export interface StatelessChatRequest {
   webSearchModelId?: string;
   /** Selected Baidu Web Search sub-sources only. */
   baiduSubSources?: BaiduSubSources;
+  /** Server-validated Codex service tier requested by the current model selection. */
+  serviceTier?: ModelServiceTier;
 }
 
 /**

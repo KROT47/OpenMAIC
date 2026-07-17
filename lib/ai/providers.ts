@@ -48,6 +48,7 @@ import type {
 } from '@/lib/types/provider';
 import { applyModelMetadata, getCatalogThinkingCapability } from './model-metadata';
 import { findModelById } from './model-aliases';
+import { getBundledCodexModelCatalog } from './codex-catalog';
 import {
   getDefaultThinkingConfig,
   getThinkingMode,
@@ -56,6 +57,7 @@ import {
 } from './thinking-config';
 import { createLogger } from '@/lib/logger';
 import { normalizeAzureBaseUrl } from './azure';
+import { CODEX_RESPONSES_BASE_URL, wrapCodexLanguageModel } from './codex-model';
 // NOTE: Do NOT import thinking-context.ts here — it uses node:async_hooks
 // which is server-only, and this file is also used on the client via
 // settings.ts. The thinking context is read from globalThis instead
@@ -67,7 +69,12 @@ const log = createLogger('AIProviders');
 export type { ProviderId, ProviderConfig, ModelInfo, ModelConfig };
 
 /** Provider IDs whose logos are monochrome-dark and need `dark:invert` in dark mode */
-export const MONO_LOGO_PROVIDERS: ReadonlySet<string> = new Set(['openai', 'openrouter', 'ollama']);
+export const MONO_LOGO_PROVIDERS: ReadonlySet<string> = new Set([
+  'openai',
+  'openai-codex',
+  'openrouter',
+  'ollama',
+]);
 
 /**
  * Provider registry
@@ -222,6 +229,16 @@ export const PROVIDERS: Record<ProviderId, ProviderConfig> = {
     icon: '/logos/azure.svg',
     // Azure requests use user-defined deployment names rather than model IDs.
     models: [],
+  },
+
+  'openai-codex': {
+    id: 'openai-codex',
+    name: 'Codex',
+    type: 'openai',
+    requiresApiKey: false,
+    credentialMode: 'oauth',
+    icon: '/logos/openai.svg',
+    models: getBundledCodexModelCatalog(),
   },
 
   atlascloud: {
@@ -1576,6 +1593,7 @@ function getProviderConfig(providerId: ProviderId): ProviderConfig | null {
             defaultBaseUrl: providerSettings.defaultBaseUrl,
             icon: providerSettings.icon,
             requiresApiKey: providerSettings.requiresApiKey,
+            credentialMode: providerSettings.credentialMode,
             models: providerSettings.models,
           };
         }
@@ -1809,6 +1827,7 @@ function createBedrockCredentialProvider(): BedrockCredentialProvider {
 }
 
 function shouldUseOpenAIResponsesApi(providerId: ProviderId, modelId: string): boolean {
+  if (providerId === 'openai-codex') return true;
   if (providerId !== 'openai') return false;
 
   return (
@@ -2039,6 +2058,9 @@ export function getModel(config: ModelConfig): ModelWithInfo {
       `Provider type mismatch for ${config.providerId}: expected ${provider.type}, received ${providerType}.`,
     );
   }
+  if (provider?.credentialMode === 'oauth' && !config.customFetch) {
+    throw new Error(`OAuth provider ${config.providerId} requires a server transport`);
+  }
 
   if (!providerType) {
     if (provider) {
@@ -2075,25 +2097,27 @@ export function getModel(config: ModelConfig): ModelWithInfo {
     }
 
     case 'openai': {
-      const useStreamingChatCompat = shouldUseOpenAIStreamingChatCompat(
-        config.providerId,
-        effectiveBaseUrl,
-      );
+      const isCodex = config.providerId === 'openai-codex';
+      const useStreamingChatCompat =
+        !isCodex && shouldUseOpenAIStreamingChatCompat(config.providerId, effectiveBaseUrl);
       const openaiOptions: Parameters<typeof createOpenAI>[0] = {
-        apiKey: effectiveApiKey,
-        baseURL: effectiveBaseUrl,
+        apiKey: isCodex ? 'openmaic-codex-oauth' : effectiveApiKey,
+        baseURL: isCodex ? CODEX_RESPONSES_BASE_URL : effectiveBaseUrl,
         name: config.providerId,
       };
+      if (isCodex) openaiOptions.fetch = config.customFetch;
 
       // A custom base URL makes the `openai` slot an OpenAI-compatible gateway,
       // not the native OpenAI service. Give it the same request/response seam
       // as named compatible providers: inject the gateway's thinking control
       // and recover reasoning_content before the SDK schema can discard it.
       const usesOpenAIResponses =
-        !useStreamingChatCompat && shouldUseOpenAIResponsesApi(config.providerId, config.modelId);
+        isCodex ||
+        (!useStreamingChatCompat && shouldUseOpenAIResponsesApi(config.providerId, config.modelId));
       const usesCompatTransport =
-        config.providerId !== 'openai' ||
-        (usesCustomOpenAIBaseUrl(config.baseUrl) && !usesOpenAIResponses);
+        !isCodex &&
+        (config.providerId !== 'openai' ||
+          (usesCustomOpenAIBaseUrl(config.baseUrl) && !usesOpenAIResponses));
       if (usesCompatTransport) {
         const providerId = config.providerId;
         const compatFetch = async (url: RequestInfo | URL, init?: RequestInit) => {
@@ -2220,6 +2244,7 @@ export function getModel(config: ModelConfig): ModelWithInfo {
           middleware,
         });
       }
+      if (isCodex) model = wrapCodexLanguageModel(model, { serviceTier: config.serviceTier });
       break;
     }
 

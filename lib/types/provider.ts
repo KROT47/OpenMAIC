@@ -9,6 +9,7 @@ export type BuiltInProviderId =
   | 'openai'
   | 'azure'
   | 'atlascloud'
+  | 'openai-codex'
   | 'anthropic'
   | 'bedrock'
   | 'google'
@@ -36,6 +37,7 @@ export type ProviderId = BuiltInProviderId | `custom-${string}`;
  * Provider API types
  */
 export type ProviderType = 'openai' | 'azure' | 'anthropic' | 'bedrock' | 'google';
+export type CredentialMode = 'api-key' | 'oauth' | 'none';
 
 export type ThinkingControlType =
   | 'none'
@@ -49,6 +51,7 @@ export type ThinkingControlType =
 export type ThinkingMode = 'default' | 'disabled' | 'enabled' | 'auto';
 export type ThinkingEffort = 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 export type ThinkingLevel = 'minimal' | 'low' | 'medium' | 'high';
+export type ModelServiceTier = 'priority';
 
 export type ThinkingRequestAdapter =
   | 'none'
@@ -148,6 +151,8 @@ export interface ModelInfo {
     tools?: boolean;
     vision?: boolean;
     thinking?: ThinkingCapability;
+    /** Request service tiers advertised by the model catalog. */
+    serviceTiers?: ModelServiceTier[];
   };
   /**
    * Where this model entry came from. `'probed'` marks entries auto-discovered
@@ -176,6 +181,8 @@ export interface ProviderConfig {
    */
   alternateBaseUrls?: { label: string; url: string }[];
   requiresApiKey: boolean;
+  /** How credentials are supplied. OAuth providers never accept a browser API key. */
+  credentialMode?: CredentialMode;
   icon?: string;
   models: ModelInfo[];
 }
@@ -190,4 +197,8 @@ export interface ModelConfig {
   baseUrl?: string;
   proxy?: string; // Optional: HTTP proxy URL for this provider
   providerType?: ProviderType; // Optional: for custom providers on server-side
+  /** Server-injected fetch boundary for providers whose credentials never reach the client. */
+  customFetch?: typeof globalThis.fetch;
+  /** Server-validated request tier for catalog-gated providers such as Codex. */
+  serviceTier?: ModelServiceTier;
 }
