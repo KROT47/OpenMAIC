@@ -55,14 +55,6 @@
     "exportFailed": "Ошибка экспорта",
     "classroomZip": "Экспорт ZIP класса",
     "classroomZipDesc": "Структура курса + медиафайлы",
-    "scriptMd": "Скачать сценарий (.md)",
-    "scriptMdDesc": "Текст озвучки в Markdown",
-    "script": "Скачать сценарий",
-    "scriptDocx": "Скачать сценарий (.docx)",
-    "scriptDocxDesc": "Настоящий документ Word в формате DOCX",
-    "slideFallback": "Слайд {{order}}",
-    "textOnly": "Экспорт сценария",
-    "mediaPending": "Ожидание завершения генерации медиа",
     "inlinePartial": "Не удалось упаковать {{count}} внешн. ресурс(ов); курс может отображаться некорректно офлайн.",
     "video": "Экспорт видео",
     "videoDesc": "Автономный проект Hyperframes (рендеринг в MP4)",
@@ -73,6 +65,17 @@
     "videoSuccess": "Видеопроект экспортирован",
     "videoFailed": "Ошибка экспорта видео",
     "videoWarnings": "Отсутствует ресурсов: {{assets}}; проблем в отчёте об экспорте: {{diagnostics}}.",
+    "noSlides": "Нет слайдов для экспорта",
+    "noSlidesSkipped": "В этом курсе нет слайдов — PPTX пропущен",
+    "nothingToExport": "Нет данных для экспорта",
+    "scriptMd": "Скачать сценарий (.md)",
+    "scriptMdDesc": "Текст озвучки в Markdown",
+    "script": "Скачать сценарий",
+    "scriptDocx": "Скачать сценарий (.docx)",
+    "scriptDocxDesc": "Настоящий документ Word в формате DOCX",
+    "slideFallback": "Слайд {{order}}",
+    "textOnly": "Экспорт сценария",
+    "mediaPending": "Ожидание завершения генерации медиа",
     "videoMp4Success": "Видео отрендерено",
     "videoServiceUnavailable": "Сервис рендеринга не настроен — ZIP проекта загружен для локального рендеринга.",
     "videoResolution": "Разрешение",
@@ -97,10 +100,7 @@
     "subtitlesCompiling": "Компиляция субтитров...",
     "subtitlesSuccess": "Субтитры скачаны",
     "subtitlesEmpty": "Нет закадрового текста для субтитров",
-    "subtitlesFailed": "Не удалось скачать субтитры",
-    "noSlides": "Нет слайдов для экспорта",
-    "noSlidesSkipped": "В этом курсе нет слайдов — PPTX пропущен",
-    "nothingToExport": "Нет данных для экспорта"
+    "subtitlesFailed": "Не удалось скачать субтитры"
   },
   "import": {
     "classroom": "Импорт класса",
@@ -135,22 +135,6 @@
       "emptyAgentResponses": "Агенты вернули пустые ответы; обсуждение остановлено. Попробуйте ещё раз или проверьте настройки модели.",
       "streamInterrupted": "Поток данных неожиданно прервался; обсуждение не завершено. Попробуйте ещё раз."
     },
-    "elementReference": {
-      "button": "Сослаться на слайд",
-      "unavailable": "Можно сослаться только на текущий слайд PPT",
-      "instruction": "Нажмите на элемент слайда · Esc для выхода",
-      "fallback": "Другие элементы слайда ({{count}})",
-      "clear": "Удалить ссылку на слайд",
-      "summary": {
-        "noText": "Без текста",
-        "emptyContent": "Без содержимого",
-        "code": "Код",
-        "line": "Линия",
-        "imageMetadata": "Изображение (только метаданные)",
-        "videoMetadata": "Видео (только метаданные)",
-        "audioMetadata": "Аудио (только метаданные)"
-      }
-    },
     "tabs": {
       "lecture": "Заметки",
       "chat": "Чат"
@@ -167,6 +151,22 @@
       "qa": "Вопросы",
       "discussion": "ДИСКУС",
       "lecture": "ЛЕКЦ"
+    },
+    "elementReference": {
+      "button": "Сослаться на слайд",
+      "unavailable": "Можно сослаться только на текущий слайд PPT",
+      "instruction": "Нажмите на элемент слайда · Esc для выхода",
+      "fallback": "Другие элементы слайда ({{count}})",
+      "clear": "Удалить ссылку на слайд",
+      "summary": {
+        "noText": "Без текста",
+        "emptyContent": "Без содержимого",
+        "code": "Код",
+        "line": "Линия",
+        "imageMetadata": "Изображение (только метаданные)",
+        "videoMetadata": "Видео (только метаданные)",
+        "audioMetadata": "Аудио (только метаданные)"
+      }
     }
   },
   "actions": {
@@ -247,8 +247,14 @@
       "interactive": "Интерактив",
       "pbl": "PBL"
     },
+    "multiTab": {
+      "conflict": {
+        "title": "Этот курс уже редактируется в другой вкладке",
+        "body": "Редактирование возможно только в одной вкладке одновременно, чтобы избежать конфликтных изменений. Закройте другую вкладку (или дождитесь истечения её сеанса) перед входом в режим редактирования здесь.",
+        "actionDismiss": "Понятно"
+      }
+    },
     "text": {
-      "toolbar": "Панель текста",
       "label": "Текст",
       "font": "Шрифт",
       "fontDefault": "По умолчанию",
@@ -263,31 +269,19 @@
       "alignCenter": "По центру",
       "alignRight": "По правому краю",
       "bullet": "Маркированный список",
+      "toolbar": "Панель текста",
       "colorHex": "Код цвета"
     },
-    "line": {
-      "toolbar": "Панель линии",
-      "kind": "Тип линии",
-      "color": "Цвет линии",
-      "width": "Толщина линии",
-      "style": "Стиль линии",
-      "start": "Начало линии",
-      "end": "Конец линии",
-      "straight": "Прямая",
-      "broken": "Ломаная",
-      "broken2": "Двойная ломаная",
-      "curve": "Кривая",
-      "cubic": "Кубическая кривая",
-      "solid": "Сплошная",
-      "dashed": "Штриховая",
-      "dotted": "Пунктирная",
-      "none": "Нет",
-      "arrow": "Стрелка",
-      "dot": "Точка"
-    },
     "insert": {
-      "toolbar": "Панель вставки",
       "textBox": "Текстовое поле",
+      "dragToolbar": "Переместить инструменты вставки",
+      "dragToolbarKeyboard": "Переместить инструменты: нажмите Enter или пробел, затем используйте стрелки",
+      "image": "Изображение",
+      "imageDrop": "Перетащите изображение или нажмите, чтобы выбрать файл",
+      "imageOr": "или вставьте URL изображения",
+      "imageUrlPlaceholder": "https://…",
+      "imageInsert": "Вставить",
+      "toolbar": "Панель вставки",
       "line": "Линия",
       "linePresets": {
         "straight": "Прямая линия",
@@ -307,15 +301,8 @@
       "chartLine": "Линейная диаграмма",
       "chartPie": "Круговая диаграмма",
       "tableDimensions": "Таблица {{rows}} x {{columns}}",
-      "dragToolbar": "Переместить инструменты вставки",
-      "dragToolbarKeyboard": "Переместить инструменты: нажмите Enter или пробел, затем используйте стрелки",
       "collapseToolbar": "Свернуть инструменты вставки",
       "expandToolbar": "Развернуть инструменты вставки",
-      "image": "Изображение",
-      "imageDrop": "Перетащите изображение или нажмите, чтобы выбрать файл",
-      "imageOr": "или вставьте URL изображения",
-      "imageUrlPlaceholder": "https://…",
-      "imageInsert": "Вставить",
       "video": "Видео",
       "videoDrop": "Перетащите видео или нажмите, чтобы выбрать файл",
       "videoOr": "или вставьте URL видео",
@@ -326,37 +313,6 @@
       "audioOr": "или вставьте URL аудио",
       "audioUrlPlaceholder": "https://…",
       "audioInsert": "Вставить"
-    },
-    "asset": {
-      "drop": "Перетащите файл или нажмите для выбора",
-      "orUrl": "или вставьте URL файла",
-      "urlPlaceholder": "https://…",
-      "insert": "Вставить",
-      "invalidType": "Неподдерживаемый тип файла",
-      "readFailed": "Не удалось прочитать файл"
-    },
-    "latex": {
-      "toolbar": "Панель формул",
-      "editFormula": "Редактировать формулу",
-      "dialog": "Редактор формул",
-      "source": "Исходный код LaTeX",
-      "preview": "Предпросмотр",
-      "symbols": "Символы",
-      "presets": "Готовые формулы",
-      "invalidSource": "Исходный код LaTeX недействителен."
-    },
-    "video": {
-      "toolbar": "Панель видео",
-      "poster": "Задать обложку"
-    },
-    "audio": {
-      "toolbar": "Панель аудио",
-      "preview": "Прослушать аудио",
-      "pause": "Приостановить прослушивание",
-      "loop": "Повтор"
-    },
-    "table": {
-      "doubleClickToEdit": "Дважды щелкните для редактирования"
     },
     "nav": {
       "addSlide": "Добавить слайд",
@@ -382,38 +338,17 @@
       "toBack": "На задний план"
     },
     "image": {
-      "toolbar": "Панель изображения",
       "replace": "Заменить изображение",
       "flipH": "Отразить по горизонтали",
       "flipV": "Отразить по вертикали",
+      "toolbar": "Панель изображения",
       "crop": "Обрезать изображение"
-    },
-    "contextMenu": {
-      "horizontalAlignment": "Выравнивание по горизонтали",
-      "verticalAlignment": "Выравнивание по вертикали",
-      "selectAll": "Выбрать все",
-      "copy": "Копировать",
-      "cut": "Вырезать",
-      "paste": "Вставить",
-      "unlock": "Разблокировать",
-      "lock": "Заблокировать",
-      "group": "Сгруппировать",
-      "ungroup": "Разгруппировать",
-      "bringForward": "Переместить вперед",
-      "sendBackward": "Переместить назад",
-      "alignTop": "Выровнять по верхнему краю",
-      "alignMiddle": "Выровнять по центру",
-      "alignBottom": "Выровнять по нижнему краю"
     },
     "background": {
       "label": "Фон",
       "solid": "Сплошной цвет",
       "image": "Изображение",
       "color": "Цвет"
-    },
-    "common": {
-      "cancel": "Отмена",
-      "confirm": "Подтвердить"
     },
     "quiz": {
       "addQuestion": "Добавить вопрос",
@@ -463,7 +398,6 @@
       "discussion": "Обсуждение"
     },
     "element": {
-      "toolbar": "Панель элемента",
       "text": "Текст",
       "image": "Изображение",
       "shape": "Фигура",
@@ -473,7 +407,8 @@
       "latex": "Формула",
       "video": "Видео",
       "audio": "Аудио",
-      "code": "Код"
+      "code": "Код",
+      "toolbar": "Панель элемента"
     },
     "agent": {
       "expand": "Развернуть ИИ-помощника",
@@ -558,14 +493,14 @@
       "discussionDesc": "Задать вопрос и выбрать, кто начнёт"
     },
     "tts": {
-      "cancelPreview": "Отменить",
       "preview": "Прослушать",
       "regenerate": "Сгенерировать озвучку заново",
       "statusReady": "Озвучено",
       "statusNone": "Не озвучено",
       "statusGenerating": "Генерация",
-      "stopPreview": "Остановить",
-      "statusError": "Ошибка"
+      "statusError": "Ошибка",
+      "cancelPreview": "Отменить",
+      "stopPreview": "Остановить"
     },
     "pick": {
       "pickFor": "Выберите элемент для «{{label}}»",
@@ -618,6 +553,78 @@
       "notApplied": "Не применено",
       "applyFailed": "Редактору не удалось применить изменение элемента. Ничего не изменено.",
       "applyPartiallyFailed": "Редактору не удалось применить одно или несколько изменений. Другие изменения могли быть применены."
+    },
+    "line": {
+      "toolbar": "Панель линии",
+      "kind": "Тип линии",
+      "color": "Цвет линии",
+      "width": "Толщина линии",
+      "style": "Стиль линии",
+      "start": "Начало линии",
+      "end": "Конец линии",
+      "straight": "Прямая",
+      "broken": "Ломаная",
+      "broken2": "Двойная ломаная",
+      "curve": "Кривая",
+      "cubic": "Кубическая кривая",
+      "solid": "Сплошная",
+      "dashed": "Штриховая",
+      "dotted": "Пунктирная",
+      "none": "Нет",
+      "arrow": "Стрелка",
+      "dot": "Точка"
+    },
+    "asset": {
+      "drop": "Перетащите файл или нажмите для выбора",
+      "orUrl": "или вставьте URL файла",
+      "urlPlaceholder": "https://…",
+      "insert": "Вставить",
+      "invalidType": "Неподдерживаемый тип файла",
+      "readFailed": "Не удалось прочитать файл"
+    },
+    "latex": {
+      "toolbar": "Панель формул",
+      "editFormula": "Редактировать формулу",
+      "dialog": "Редактор формул",
+      "source": "Исходный код LaTeX",
+      "preview": "Предпросмотр",
+      "symbols": "Символы",
+      "presets": "Готовые формулы",
+      "invalidSource": "Исходный код LaTeX недействителен."
+    },
+    "video": {
+      "toolbar": "Панель видео",
+      "poster": "Задать обложку"
+    },
+    "audio": {
+      "toolbar": "Панель аудио",
+      "preview": "Прослушать аудио",
+      "pause": "Приостановить прослушивание",
+      "loop": "Повтор"
+    },
+    "table": {
+      "doubleClickToEdit": "Дважды щелкните для редактирования"
+    },
+    "contextMenu": {
+      "horizontalAlignment": "Выравнивание по горизонтали",
+      "verticalAlignment": "Выравнивание по вертикали",
+      "selectAll": "Выбрать все",
+      "copy": "Копировать",
+      "cut": "Вырезать",
+      "paste": "Вставить",
+      "unlock": "Разблокировать",
+      "lock": "Заблокировать",
+      "group": "Сгруппировать",
+      "ungroup": "Разгруппировать",
+      "bringForward": "Переместить вперед",
+      "sendBackward": "Переместить назад",
+      "alignTop": "Выровнять по верхнему краю",
+      "alignMiddle": "Выровнять по центру",
+      "alignBottom": "Выровнять по нижнему краю"
+    },
+    "common": {
+      "cancel": "Отмена",
+      "confirm": "Подтвердить"
     },
     "roster": {
       "title": "Состав класса",
@@ -733,7 +740,67 @@
     "startRecording": "Начать запись"
   },
   "pbl": {
+    "legacyFormat": "Эта PBL-сцена использует устаревший формат. Пожалуйста, перегенерируйте курс.",
     "emptyProject": "PBL-проект ещё не создан. Создайте его через генерацию курса.",
+    "roleSelection": {
+      "title": "Выберите роль",
+      "description": "Выберите роль для совместной работы над проектом"
+    },
+    "workspace": {
+      "restart": "Перезапуск",
+      "confirmRestart": "Сбросить весь прогресс?",
+      "confirm": "Подтвердить",
+      "cancel": "Отмена"
+    },
+    "issueboard": {
+      "title": "Доска задач",
+      "noIssues": "Задач пока нет",
+      "statusDone": "Готово",
+      "statusActive": "Активна",
+      "statusPending": "В ожидании"
+    },
+    "chat": {
+      "title": "Обсуждение проекта",
+      "currentIssue": "Текущая задача",
+      "mentionHint": "Используйте @question для вопроса, @judge для проверки",
+      "placeholder": "Введите сообщение...",
+      "send": "Отправить",
+      "issueCompleteMessage": "Задача \"{{completed}}\" выполнена! Переход к следующей: \"{{next}}\"",
+      "allCompleteMessage": "🎉 Все задачи выполнены! Отличная работа над проектом!"
+    },
+    "guide": {
+      "howItWorks": "Как это работает",
+      "help": "Помощь",
+      "title": "Помощь",
+      "step1": {
+        "title": "Шаг 1: Выберите роль",
+        "desc": "После генерации проекта выберите роль из списка (не-системные роли отмечены 🟢)"
+      },
+      "step2": {
+        "title": "Шаг 2: Выполняйте задачи",
+        "desc": "Каждая задача — это учебное задание:",
+        "s1": {
+          "title": "Просмотрите задачу",
+          "desc": "Изучите заголовок, описание и исполнителя задачи"
+        },
+        "s2": {
+          "title": "Получите подсказки",
+          "example": "@question С чего начать?\n@question Как реализовать эту функцию?",
+          "desc": "Question Agent даёт наводящие вопросы и подсказки (не прямые ответы)"
+        },
+        "s3": {
+          "title": "Сдайте работу",
+          "example": "@judge Готово, проверьте мои заметки",
+          "desc": "Judge Agent оценивает вашу работу и даёт обратную связь:",
+          "complete": "Автоматический переход к следующей задаче",
+          "revision": "Доработайте по замечаниям"
+        }
+      },
+      "step3": {
+        "title": "Шаг 3: Завершите проект",
+        "desc": "Когда все задачи выполнены, система показывает \"🎉 Проект завершён!\""
+      }
+    },
     "v2": {
       "hero": {
         "title": "Проектное обучение · Project-Based Learning",
@@ -1214,7 +1281,6 @@
       "azure": "Azure OpenAI",
       "anthropic": "Claude",
       "google": "Gemini",
-      "bedrock": "Amazon Bedrock",
       "deepseek": "DeepSeek",
       "qwen": "Qwen",
       "kimi": "Kimi",
@@ -1232,8 +1298,10 @@
       "bocha": "Bocha",
       "brave": "Brave Search",
       "baidu": "Baidu",
-      "claude": "Claude",
-      "searxng": "SearXNG"
+      "searxng": "SearXNG",
+      "openai-codex": "Codex",
+      "bedrock": "Amazon Bedrock",
+      "claude": "Claude"
     },
     "providerTypes": {
       "openai": "Протокол OpenAI",
@@ -1438,20 +1506,9 @@
     "voxcpmStopPreview": "Остановить прослушивание",
     "voxcpmPreviewVoice": "Прослушать голос",
     "voxcpmDeleteVoice": "Удалить голос",
-    "qwenCloneVoicesTitle": "Qwen TTS Cloned Voices",
-    "qwenCloneRefText": "Enter the verbatim transcript of the reference audio",
-    "qwenCloneRefAudioHint": "Use a clean 1–60 second voice sample. A 10–20 second sample is recommended; audio is converted to 24 kHz mono PCM WAV.",
-    "qwenCloneSaved": "Qwen cloned voice registered and saved",
-    "qwenCloneSaveFailed": "Failed to register the Qwen cloned voice",
-    "qwenCloneUnsupported": "Recording is not supported in this browser; upload an audio file instead.",
-    "qwenCloneSpeedHint": "Cloned voices always synthesize at 1× speed.",
-    "qwenCloneDeleteWarning": "The voice was removed locally, but provider deletion failed.",
-    "qwenCloneNarrationUnavailable": "The assigned voice is unavailable. Narration will use another enabled voice instead.",
-    "qwenCloneDiscussionUnavailable": "The assigned voice is unavailable. Discussion will use another enabled voice instead.",
     "providerOpenAIWhisper": "OpenAI ASR (gpt-4o-mini-transcribe)",
     "providerBrowserNative": "Встроенный ASR браузера",
     "providerQwenASR": "Qwen ASR (Alibaba Cloud Bailian)",
-    "providerFunASRASR": "FunASR (Локальный)",
     "providerLemonadeASR": "Lemonade ASR (Локальный)",
     "providerAzureASR": "Azure STT",
     "providerUnpdf": "unpdf (встроенный)",
@@ -1770,16 +1827,11 @@
     "clearCacheButton": "Удалить все данные навсегда",
     "clearCacheSuccess": "Кэш очищен, страница скоро обновится",
     "clearCacheFailed": "Не удалось очистить кэш, попробуйте снова",
-    "clearCacheBlockedByOtherTabs": "Закройте другие вкладки приложения и попробуйте снова.",
-    "persistUnavailable": "Изменения не сохраняются: приложению не удаётся получить доступ к сохранённым данным. Если перезагрузка не помогает, очистите локальный кэш в настройках.",
-    "persistChangesLost": "Хранилище снова работает, но изменения, сделанные во время сбоя, сохранить не удалось — они заменены последней сохранённой версией.",
     "webSearchSettings": "Веб-поиск",
     "webSearchApiKey": "API-ключ поиска",
     "webSearchApiKeyPlaceholder": "Введите API-ключ поиска",
     "webSearchApiKeyPlaceholderServer": "Серверный ключ настроен, можно ввести свой",
     "webSearchApiKeyHint": "Получите API-ключ у выбранного поискового провайдера",
-    "claudeSearchModel": "Модель поиска",
-    "claudeSearchModelHint": "Модель Claude, которая выполняет веб-поиск и обобщает результаты.",
     "webSearchApiKeyOptional": "API-ключ необязателен. Без него будет использоваться парсинг публичной страницы.",
     "searxngServerOnlyNotice": "SearXNG должен быть настроен на сервере. Установите переменную окружения SEARXNG_BASE_URL (или раздел web-search в server-providers.yml). URL экземпляра от клиента не принимаются.",
     "baiduSubSources": "Источники поиска Baidu",
@@ -1844,6 +1896,58 @@
       "capabilities": "Capabilities offered",
       "offeredNote": "Models offered by this plan. Pick the ones you want on the generation bar — availability depends on your plan tier, and unsupported models will error at generation time."
     },
+    "ttsBrowserNativeTimelineNotice": "Встроенный в браузер TTS не поддерживает функции аудио на таймлайне редактора (прослушивание, повторная генерация и массовая озвучка). Переключитесь на управляемый TTS-провайдер, чтобы генерировать и управлять аудио для каждой строки.",
+    "alidocmindAccessKeyId": "AccessKey ID",
+    "alidocmindAccessKeySecret": "AccessKey Secret",
+    "codexOAuth": {
+      "experimental": "Экспериментальная сторонняя интеграция Codex; использует квоту вашего тарифа ChatGPT.",
+      "unavailableTitle": "Вход в Codex недоступен",
+      "unavailable": {
+        "SERVERLESS_UNSUPPORTED": "Для Codex OAuth нужен самостоятельно размещённый Node-сервер с постоянным хранилищем.",
+        "ACCESS_CODE_REQUIRED": "Для использования Codex OAuth в production настройте ACCESS_CODE.",
+        "DATA_DIR_UNWRITABLE": "Сервер не может записывать в каталог данных. Проверьте права /app/data.",
+        "RUNTIME_LOCKED": "Каталог данных Codex уже используется другим процессом OpenMAIC Node."
+      },
+      "connectedAs": "Подключено как {email}",
+      "connected": "Подключено к ChatGPT",
+      "signInBrowser": "Войти через ChatGPT",
+      "signInDevice": "Использовать код устройства",
+      "waiting": "Ожидание авторизации…",
+      "deviceInstructions": "Откройте страницу проверки и введите этот одноразовый код.",
+      "openVerification": "Открыть страницу проверки",
+      "copyCode": "Копировать код",
+      "copied": "Скопировано",
+      "cancel": "Отменить вход",
+      "signOut": "Выйти",
+      "models": "Доступные модели",
+      "fastMode": "Быстрый режим",
+      "fastModeDescription": "Работает только с поддерживаемыми моделями: примерно в 1,5 раза быстрее, но расходует больше квоты вашего тарифа ChatGPT.",
+      "testConnection": "Проверить подключение",
+      "testSuccess": "Подключение к Codex выполнено.",
+      "testUnauthorized": "Войдите через ChatGPT ещё раз.",
+      "testForbidden": "У этого рабочего пространства ChatGPT нет доступа к Codex.",
+      "testRateLimited": "Достигнута квота или частотный лимит тарифа ChatGPT.",
+      "testFailed": "Не удалось подключиться к Codex.",
+      "loginFailed": "Не удалось войти. Выберите любой способ входа и повторите попытку.",
+      "loginExpired": "Срок этой попытки входа истёк. Начните заново."
+    },
+    "connected": "Подключено",
+    "qwenCloneVoicesTitle": "Qwen TTS Cloned Voices",
+    "qwenCloneRefText": "Enter the verbatim transcript of the reference audio",
+    "qwenCloneRefAudioHint": "Use a clean 1–60 second voice sample. A 10–20 second sample is recommended; audio is converted to 24 kHz mono PCM WAV.",
+    "qwenCloneSaved": "Qwen cloned voice registered and saved",
+    "qwenCloneSaveFailed": "Failed to register the Qwen cloned voice",
+    "qwenCloneUnsupported": "Recording is not supported in this browser; upload an audio file instead.",
+    "qwenCloneSpeedHint": "Cloned voices always synthesize at 1× speed.",
+    "qwenCloneDeleteWarning": "The voice was removed locally, but provider deletion failed.",
+    "qwenCloneNarrationUnavailable": "The assigned voice is unavailable. Narration will use another enabled voice instead.",
+    "qwenCloneDiscussionUnavailable": "The assigned voice is unavailable. Discussion will use another enabled voice instead.",
+    "providerFunASRASR": "FunASR (Локальный)",
+    "clearCacheBlockedByOtherTabs": "Закройте другие вкладки приложения и попробуйте снова.",
+    "persistUnavailable": "Изменения не сохраняются: приложению не удаётся получить доступ к сохранённым данным. Если перезагрузка не помогает, очистите локальный кэш в настройках.",
+    "persistChangesLost": "Хранилище снова работает, но изменения, сделанные во время сбоя, сохранить не удалось — они заменены последней сохранённой версией.",
+    "claudeSearchModel": "Модель поиска",
+    "claudeSearchModelHint": "Модель Claude, которая выполняет веб-поиск и обобщает результаты.",
     "skills": {
       "nav": "Навыки",
       "title": "Настройки навыков",
@@ -1870,10 +1974,38 @@
       "deleteTitle": "Удалить навык?",
       "deleteConfirm": "Навык будет удалён из вашей учётной записи. Это действие нельзя отменить.",
       "deleteFailed": "Не удалось удалить навык. Повторите попытку."
-    },
-    "ttsBrowserNativeTimelineNotice": "Встроенный в браузер TTS не поддерживает функции аудио на таймлайне редактора (прослушивание, повторная генерация и массовая озвучка). Переключитесь на управляемый TTS-провайдер, чтобы генерировать и управлять аудио для каждой строки.",
-    "alidocmindAccessKeyId": "AccessKey ID",
-    "alidocmindAccessKeySecret": "AccessKey Secret"
+    }
+  },
+  "profile": {
+    "title": "Профиль",
+    "defaultNickname": "Ученик",
+    "chooseAvatar": "Выбрать аватар",
+    "uploadAvatar": "Загрузить",
+    "bioPlaceholder": "Расскажите о себе — AI-учитель адаптирует уроки под ваш уровень...",
+    "avatarHint": "Ваш аватар будет отображаться в обсуждениях и чатах",
+    "fileTooLarge": "Изображение слишком большое — выберите файл до 5 МБ",
+    "invalidFileType": "Пожалуйста, выберите файл изображения",
+    "editTooltip": "Нажмите для редактирования профиля"
+  },
+  "media": {
+    "imageCapability": "Генерация изображений",
+    "imageHint": "Генерация изображений в слайдах",
+    "videoCapability": "Генерация видео",
+    "videoHint": "Генерация видео в слайдах",
+    "ttsCapability": "Синтез речи",
+    "ttsHint": "AI-учитель говорит вслух",
+    "asrCapability": "Распознавание речи",
+    "asrHint": "Голосовой ввод для обсуждения",
+    "provider": "Провайдер",
+    "model": "Модель",
+    "voice": "Голос",
+    "speed": "Скорость",
+    "language": "Язык"
+  },
+  "accessCode": {
+    "title": "Введите код доступа",
+    "placeholder": "Код доступа",
+    "error": "Неверный код доступа. Попробуйте ещё раз."
   },
   "workspace": {
     "untitledCourse": "未命名课堂",
@@ -1970,37 +2102,6 @@
     "courseTabClose": "Закрыть вкладку: {{name}}",
     "courseTabRunning": "Генерируется",
     "foldersUnavailable": "Папки недоступны в этой сборке"
-  },
-  "profile": {
-    "title": "Профиль",
-    "defaultNickname": "Ученик",
-    "chooseAvatar": "Выбрать аватар",
-    "uploadAvatar": "Загрузить",
-    "bioPlaceholder": "Расскажите о себе — AI-учитель адаптирует уроки под ваш уровень...",
-    "avatarHint": "Ваш аватар будет отображаться в обсуждениях и чатах",
-    "fileTooLarge": "Изображение слишком большое — выберите файл до 5 МБ",
-    "invalidFileType": "Пожалуйста, выберите файл изображения",
-    "editTooltip": "Нажмите для редактирования профиля"
-  },
-  "media": {
-    "imageCapability": "Генерация изображений",
-    "imageHint": "Генерация изображений в слайдах",
-    "videoCapability": "Генерация видео",
-    "videoHint": "Генерация видео в слайдах",
-    "ttsCapability": "Синтез речи",
-    "ttsHint": "AI-учитель говорит вслух",
-    "asrCapability": "Распознавание речи",
-    "asrHint": "Голосовой ввод для обсуждения",
-    "provider": "Провайдер",
-    "model": "Модель",
-    "voice": "Голос",
-    "speed": "Скорость",
-    "language": "Язык"
-  },
-  "accessCode": {
-    "title": "Введите код доступа",
-    "placeholder": "Код доступа",
-    "error": "Неверный код доступа. Попробуйте ещё раз."
   },
   "proMode": {
     "attach": "Прикрепить материал",

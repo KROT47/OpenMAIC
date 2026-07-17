@@ -20,6 +20,8 @@
     "check:package-versions": "node scripts/check-package-version-bumps.mjs",
     "check": "prettier . --check",
     "format": "prettier . --write",
+    "accept:codex": "node --no-warnings --import tsx scripts/codex-acceptance.ts",
+    "refresh:codex": "node --no-warnings --import tsx scripts/codex-force-refresh.ts",
     "test": "vitest run",
     "test:package-tarballs": "node scripts/smoke-test-package-tarballs.mjs",
     "test:e2e": "playwright test",

@@ -475,6 +475,8 @@ docker compose --profile video-export up --build
 ```
 
 The app auto-detects the service via `RENDER_SERVICE_URL` (preset in `docker-compose.yml`) and enables one-click MP4 rendering. Without the profile — or when `RENDER_SERVICE_URL` is unset — export degrades to downloading the project ZIP for local CLI rendering. See [`render-service/README.md`](render-service/README.md) for standalone setup and tuning (`RENDER_MAX_CONCURRENCY`, etc.).
+Experimental ChatGPT/Codex subscription sign-in is supported only on a single-user, single-process
+self-hosted instance with persistent storage; it is not supported by the Vercel deployment above.
 
 ### Optional: MinerU (Advanced Document Parsing)
 

@@ -325,6 +325,8 @@ docker build \
 `node:22-alpine` 基础镜像。若这些步骤较慢，需要单独配置 Docker daemon 的
 registry mirror。同一个 BuildKit builder 会在常规缓存清理前跨构建复用 pnpm
 store；缓存只用于提升性能，不是正确完成构建的必要条件。
+实验性的 ChatGPT/Codex 订阅登录只支持带持久化存储的单用户、单进程自托管实例，不支持
+上面的 Vercel 部署。
 
 ### 可选：MinerU（增强文档解析）
 

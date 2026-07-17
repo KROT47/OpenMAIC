@@ -13,7 +13,8 @@ import type { ProviderId } from '@/lib/ai/providers';
 import type { ProvidersConfig } from '@/lib/types/settings';
 import { PROVIDERS } from '@/lib/ai/providers';
 import { findModelById, getCanonicalModelId } from '@/lib/ai/model-aliases';
-import type { ThinkingConfig } from '@/lib/types/provider';
+import { getBundledCodexModelCatalog, rebuildCodexModelCatalog } from '@/lib/ai/codex-catalog';
+import type { ModelInfo, ModelServiceTier, ThinkingConfig } from '@/lib/types/provider';
 import { getThinkingConfigKey, supportsConfigurableThinking } from '@/lib/ai/thinking-config';
 import type { TTSProviderId, ASRProviderId, BuiltInTTSProviderId } from '@/lib/audio/types';
 import type { AgentVoiceOverride } from '@/lib/audio/voice-resolver';
@@ -42,9 +43,58 @@ import {
 import { createKVPersistStorage, purgeLegacyPersistKey } from '@/lib/store/kv-persist';
 
 const log = createLogger('Settings');
+let latestServerProvidersRequest = 0;
+let userLLMSelectionRevision = 0;
+
+interface PendingCodexSelectionRestore {
+  requestGeneration: number;
+  selectionRevision: number;
+  intent: { modelId: string };
+  fallback: { providerId: ProviderId; modelId: string };
+}
+
+let pendingCodexSelectionRestore: PendingCodexSelectionRestore | null = null;
+
+function matchesLLMSelection(
+  state: { providerId: ProviderId; modelId: string },
+  selection: { providerId: ProviderId; modelId: string },
+): boolean {
+  return state.providerId === selection.providerId && state.modelId === selection.modelId;
+}
+
+function getOAuthProviderBaselineModels(providerId: ProviderId): ModelInfo[] {
+  const registryProvider = PROVIDERS[providerId];
+  if (!registryProvider) return [];
+  return providerId === 'openai-codex'
+    ? getBundledCodexModelCatalog()
+    : registryProvider.models.map((model) => ({ ...model }));
+}
+
+function resetOAuthProviderState(providersConfig: ProvidersConfig): ProvidersConfig {
+  const next = { ...providersConfig };
+  for (const providerId of Object.keys(next) as ProviderId[]) {
+    const registryProvider = PROVIDERS[providerId];
+    if (!next[providerId] || registryProvider?.credentialMode !== 'oauth') continue;
+
+    next[providerId] = {
+      ...next[providerId],
+      apiKey: '',
+      baseUrl: '',
+      models: getOAuthProviderBaselineModels(providerId),
+      name: registryProvider.name,
+      type: registryProvider.type,
+      icon: registryProvider.icon,
+      requiresApiKey: registryProvider.requiresApiKey,
+      credentialMode: registryProvider.credentialMode,
+      isServerConfigured: false,
+      serverModels: undefined,
+    };
+  }
+  return next;
+}
 
 /** Persisted-blob version for zustand's `persist` `migrate` ladder. */
-const SETTINGS_PERSIST_VERSION = 4;
+const SETTINGS_PERSIST_VERSION = 5;
 
 /**
  * Bound after the store exists; see `onWriteRefused` for why it is not inlined.
@@ -82,6 +132,7 @@ export interface SettingsState {
   providerId: ProviderId;
   modelId: string;
   thinkingConfigs: Record<string, ThinkingConfig>;
+  codexFastMode: boolean;
 
   // Provider configurations (unified JSON storage)
   providersConfig: ProvidersConfig;
@@ -256,6 +307,7 @@ export interface SettingsState {
 
   // Actions
   setModel: (providerId: ProviderId, modelId: string) => void;
+  setCodexFastMode: (enabled: boolean) => void;
   setThinkingConfig: (
     providerId: ProviderId,
     modelId: string,
@@ -397,12 +449,16 @@ const getDefaultProvidersConfig = (): ProvidersConfig => {
     config[pid as ProviderId] = {
       apiKey: '',
       baseUrl: '',
-      models: provider.models,
+      models:
+        provider.credentialMode === 'oauth'
+          ? getOAuthProviderBaselineModels(pid as ProviderId)
+          : provider.models,
       name: provider.name,
       type: provider.type,
       defaultBaseUrl: provider.defaultBaseUrl,
       icon: provider.icon,
       requiresApiKey: provider.requiresApiKey,
+      credentialMode: provider.credentialMode,
       isBuiltIn: true,
     };
   });
@@ -737,6 +793,21 @@ function ensureBuiltInProviders(state: Partial<SettingsState>): void {
       const provider = PROVIDERS[providerId];
       const existing = state.providersConfig![providerId];
 
+      if (provider.credentialMode === 'oauth') {
+        // OAuth connection state and dynamic models are server truth. Never
+        // revive a persisted managed flag, browser credentials, or another
+        // account's discovered model IDs during rehydrate.
+        state.providersConfig![providerId] = {
+          ...defaultConfig[providerId],
+          apiKey: '',
+          baseUrl: '',
+          models: getOAuthProviderBaselineModels(providerId),
+          isServerConfigured: false,
+          serverModels: undefined,
+        };
+        return;
+      }
+
       const builtInModelIds = new Set(provider.models.map((m) => m.id));
       const customModels = (existing.models || []).filter((m) => !builtInModelIds.has(m.id));
       const mergedModels = [...provider.models, ...customModels];
@@ -749,10 +820,25 @@ function ensureBuiltInProviders(state: Partial<SettingsState>): void {
         defaultBaseUrl: existing.defaultBaseUrl || provider.defaultBaseUrl,
         icon: provider.icon || existing.icon,
         requiresApiKey: existing.requiresApiKey ?? provider.requiresApiKey,
+        credentialMode: provider.credentialMode ?? existing.credentialMode,
         isBuiltIn: existing.isBuiltIn ?? true,
       };
     }
   });
+}
+
+function distrustPersistedOAuthSelection(state: Partial<SettingsState>): void {
+  if (!state.providersConfig || !state.providerId) return;
+  const selected = state.providersConfig[state.providerId];
+  if (selected?.credentialMode !== 'oauth' || selected.isServerConfigured) return;
+
+  const resolved = resolveLLMSelection(
+    state.providersConfig,
+    state.providerId,
+    state.modelId ?? '',
+  );
+  state.providerId = resolved.providerId;
+  state.modelId = resolved.modelId;
 }
 
 /**
@@ -889,6 +975,7 @@ export const useSettingsStore = create<SettingsState>()(
         providerId: 'openai' as ProviderId,
         modelId: '',
         thinkingConfigs: {},
+        codexFastMode: false,
         providersConfig: getDefaultProvidersConfig(),
         ttsModel: 'openai-tts',
         selectedAgentIds: ['default-1', 'default-2', 'default-3'],
@@ -942,7 +1029,12 @@ export const useSettingsStore = create<SettingsState>()(
         ...defaultWebSearchConfig,
 
         // Actions
-        setModel: (providerId, modelId) => set({ providerId, modelId }),
+        setModel: (providerId, modelId) => {
+          userLLMSelectionRevision += 1;
+          set({ providerId, modelId });
+        },
+
+        setCodexFastMode: (enabled) => set({ codexFastMode: enabled }),
 
         setThinkingConfig: (providerId, modelId, config) =>
           set((state) => {
@@ -1397,15 +1489,102 @@ export const useSettingsStore = create<SettingsState>()(
 
         // Fetch server-configured providers and merge into local state
         fetchServerProviders: async () => {
+          const requestGeneration = ++latestServerProvidersRequest;
+          const selectionRevisionAtRequest = userLLMSelectionRevision;
+          const selectedAtRequest = get();
+          const pendingAtRequest = pendingCodexSelectionRestore;
+          const inheritsPendingCodexIntent = Boolean(
+            selectedAtRequest.providerId !== 'openai-codex' &&
+            pendingAtRequest &&
+            pendingAtRequest.selectionRevision === selectionRevisionAtRequest &&
+            matchesLLMSelection(selectedAtRequest, pendingAtRequest.fallback),
+          );
+          const codexSelectionIntent =
+            selectedAtRequest.providerId === 'openai-codex'
+              ? { modelId: selectedAtRequest.modelId }
+              : inheritsPendingCodexIntent
+                ? (pendingAtRequest?.intent ?? null)
+                : null;
+          if (!codexSelectionIntent) pendingCodexSelectionRestore = null;
+
+          let scrubbedSelection: { providerId: ProviderId; modelId: string } | null = null;
+          let scrubbedSelectionRevision: number | null = null;
+
+          const clearPendingCodexRestore = () => {
+            if (pendingCodexSelectionRestore?.requestGeneration === requestGeneration) {
+              pendingCodexSelectionRestore = null;
+            }
+          };
+
+          const scrubOAuthState = (preserveCodexRestore = true) => {
+            if (requestGeneration !== latestServerProvidersRequest) return;
+            set((state) => {
+              const providersConfig = resetOAuthProviderState(state.providersConfig);
+              const selection = resolveLLMSelection(
+                providersConfig,
+                state.providerId,
+                state.modelId,
+              );
+              const canPreserveCodexIntent = Boolean(
+                preserveCodexRestore &&
+                codexSelectionIntent &&
+                userLLMSelectionRevision === selectionRevisionAtRequest &&
+                (state.providerId === 'openai-codex' ||
+                  (inheritsPendingCodexIntent &&
+                    pendingAtRequest &&
+                    matchesLLMSelection(state, pendingAtRequest.fallback))),
+              );
+              if (canPreserveCodexIntent && codexSelectionIntent) {
+                scrubbedSelection = selection;
+                scrubbedSelectionRevision = userLLMSelectionRevision;
+                pendingCodexSelectionRestore = {
+                  requestGeneration,
+                  selectionRevision: userLLMSelectionRevision,
+                  intent: codexSelectionIntent,
+                  fallback: selection,
+                };
+              } else {
+                clearPendingCodexRestore();
+              }
+              return {
+                providersConfig,
+                codexFastMode: false,
+                ...(selection.providerId !== state.providerId && {
+                  providerId: selection.providerId,
+                }),
+                ...(selection.modelId !== state.modelId && { modelId: selection.modelId }),
+              };
+            });
+          };
+
+          const finalizeFailedSync = () => {
+            if (requestGeneration !== latestServerProvidersRequest) return;
+            scrubOAuthState(false);
+            clearPendingCodexRestore();
+          };
+
+          // Account identity is intentionally absent from this browser DTO.
+          // Drop account-scoped OAuth state before every refresh, then publish
+          // only the latest successful response.
+          scrubOAuthState();
           try {
             const res = await fetch('/api/server-providers');
-            if (!res.ok) return;
+            if (requestGeneration !== latestServerProvidersRequest) return;
+            if (!res.ok) {
+              finalizeFailedSync();
+              return;
+            }
             // Managed providers expose only their allowed model list (LLM/image)
             // and presence (the "managed" flag) — never a base URL. Every
             // capability section carries an optional `disabled` flag for
             // admin/server-level force-off (#665).
             const data = (await res.json()) as {
-              providers: Record<string, { models?: string[] }>;
+              providers: Record<
+                string,
+                { models?: string[]; fastModels?: string[]; modelCatalog?: unknown }
+              >;
+              // TTS additionally carries an optional `disabled` flag for
+              // admin/server-level force-off (#665).
               tts: Record<string, { disabled?: boolean }>;
               asr: Record<string, { disabled?: boolean }>;
               pdf: Record<string, Record<string, never>>;
@@ -1414,16 +1593,31 @@ export const useSettingsStore = create<SettingsState>()(
               webSearch: Record<string, { disabled?: boolean }>;
               generation?: { parallelSceneConcurrency?: number };
             };
+            if (requestGeneration !== latestServerProvidersRequest) return;
 
             set((state) => {
               // Merge LLM providers
-              const newProvidersConfig = { ...state.providersConfig };
+              const newProvidersConfig = resetOAuthProviderState(state.providersConfig);
               // First reset all server flags
               for (const pid of Object.keys(newProvidersConfig)) {
                 const key = pid as ProviderId;
                 if (newProvidersConfig[key]) {
+                  const registryProvider = PROVIDERS[key];
+                  const isOAuth = registryProvider?.credentialMode === 'oauth';
                   newProvidersConfig[key] = {
                     ...newProvidersConfig[key],
+                    ...(isOAuth
+                      ? {
+                          apiKey: '',
+                          baseUrl: '',
+                          models: getOAuthProviderBaselineModels(key),
+                          name: registryProvider.name,
+                          type: registryProvider.type,
+                          icon: registryProvider.icon,
+                          requiresApiKey: registryProvider.requiresApiKey,
+                          credentialMode: registryProvider.credentialMode,
+                        }
+                      : {}),
                     isServerConfigured: false,
                     serverModels: undefined,
                   };
@@ -1434,35 +1628,71 @@ export const useSettingsStore = create<SettingsState>()(
                 const key = pid as ProviderId;
                 if (newProvidersConfig[key]) {
                   const currentModels = newProvidersConfig[key].models;
+                  const hasRichCodexCatalog =
+                    key === 'openai-codex' &&
+                    Object.prototype.hasOwnProperty.call(info, 'modelCatalog');
+                  const richCodexCatalog = hasRichCodexCatalog
+                    ? rebuildCodexModelCatalog(info.modelCatalog)
+                    : null;
+                  const catalogModels = PROVIDERS[key]?.models;
                   // When server specifies allowed models, filter the models list
                   // while preserving custom IDs from env/YAML in server order.
-                  const filteredModels = info.models?.length
-                    ? info.models.map((id) => {
-                        const currentModel = findModelById(key, currentModels, id);
-                        const builtInModel = findModelById(key, PROVIDERS[key]?.models, id);
-                        const model =
-                          currentModel && builtInModel
-                            ? {
-                                ...builtInModel,
-                                ...currentModel,
-                                name:
-                                  currentModel.name === currentModel.id
-                                    ? builtInModel.name
-                                    : currentModel.name,
-                                capabilities: {
-                                  ...builtInModel.capabilities,
-                                  ...currentModel.capabilities,
-                                },
-                              }
-                            : (currentModel ?? builtInModel);
-                        return model ? { ...model, id, name: model.name || id } : { id, name: id };
-                      })
-                    : currentModels;
+                  const filteredModels = hasRichCodexCatalog
+                    ? (richCodexCatalog ?? [])
+                    : info.models?.length
+                      ? info.models.map((id) => {
+                          const currentModel = findModelById(key, currentModels, id);
+                          const builtInModel = findModelById(key, catalogModels, id);
+                          const model =
+                            currentModel && builtInModel
+                              ? {
+                                  ...builtInModel,
+                                  ...currentModel,
+                                  name:
+                                    currentModel.name === currentModel.id
+                                      ? builtInModel.name
+                                      : currentModel.name,
+                                  capabilities: {
+                                    ...builtInModel.capabilities,
+                                    ...currentModel.capabilities,
+                                  },
+                                }
+                              : (currentModel ?? builtInModel);
+                          return model
+                            ? { ...model, id, name: model.name || id }
+                            : { id, name: id };
+                        })
+                      : currentModels;
+                  const fastModelIds = new Set(hasRichCodexCatalog ? [] : (info.fastModels ?? []));
+                  const models =
+                    key === 'openai-codex' && !hasRichCodexCatalog
+                      ? filteredModels.map((model) => {
+                          if (fastModelIds.has(model.id)) {
+                            return {
+                              ...model,
+                              capabilities: {
+                                ...model.capabilities,
+                                serviceTiers: ['priority'] as ModelServiceTier[],
+                              },
+                            };
+                          }
+                          if (!model.capabilities?.serviceTiers) return model;
+                          const { serviceTiers: _serviceTiers, ...capabilities } =
+                            model.capabilities;
+                          return {
+                            ...model,
+                            capabilities:
+                              Object.keys(capabilities).length > 0 ? capabilities : undefined,
+                          };
+                        })
+                      : filteredModels;
                   newProvidersConfig[key] = {
                     ...newProvidersConfig[key],
                     isServerConfigured: true,
-                    serverModels: info.models,
-                    models: filteredModels,
+                    serverModels: hasRichCodexCatalog
+                      ? (richCodexCatalog?.map((model) => model.id) ?? [])
+                      : info.models,
+                    models,
                   };
                 }
               }
@@ -1631,7 +1861,16 @@ export const useSettingsStore = create<SettingsState>()(
                   .map(([id]) => id as T),
               ];
 
-              const llmFallback = buildFallback<ProviderId>(newProvidersConfig);
+              const llmFallback = [
+                ...Object.entries(newProvidersConfig)
+                  .filter(([, config]) => config.isServerConfigured)
+                  .filter(([, config]) => isLLMProviderConfigured(config))
+                  .map(([id]) => id as ProviderId),
+                ...Object.entries(newProvidersConfig)
+                  .filter(([, config]) => !config.isServerConfigured)
+                  .filter(([, config]) => isLLMProviderConfigured(config))
+                  .map(([id]) => id as ProviderId),
+              ];
               const ttsFallback = buildFallback<TTSProviderId>(newTTSConfig);
               const asrFallback = buildFallback<ASRProviderId>(newASRConfig);
               const pdfFallback = buildFallback<PDFProviderId>(newPDFConfig);
@@ -1644,6 +1883,16 @@ export const useSettingsStore = create<SettingsState>()(
                 newProvidersConfig,
                 llmFallback,
               );
+              const shouldRestoreCodexSelection = Boolean(
+                codexSelectionIntent &&
+                scrubbedSelection &&
+                scrubbedSelectionRevision === userLLMSelectionRevision &&
+                state.providerId === scrubbedSelection.providerId &&
+                state.modelId === scrubbedSelection.modelId &&
+                newProvidersConfig['openai-codex']?.isServerConfigured &&
+                isLLMProviderConfigured(newProvidersConfig['openai-codex']),
+              );
+              if (shouldRestoreCodexSelection) validLLMProvider = 'openai-codex';
               const validTTSProvider = validateProvider(
                 state.ttsProviderId,
                 newTTSConfig,
@@ -1700,7 +1949,13 @@ export const useSettingsStore = create<SettingsState>()(
                 ? (newProvidersConfig[validLLMProvider as ProviderId]?.models ?? [])
                 : [];
               const validLLMModel = validLLMProvider
-                ? resolveSelectedLLMModel(validLLMProvider as ProviderId, state.modelId, llmModels)
+                ? resolveSelectedLLMModel(
+                    validLLMProvider as ProviderId,
+                    shouldRestoreCodexSelection
+                      ? (codexSelectionIntent?.modelId ?? state.modelId)
+                      : state.modelId,
+                    llmModels,
+                  )
                 : '';
               const imageModels = validImageProvider
                 ? resolveMediaModels(
@@ -1899,9 +2154,11 @@ export const useSettingsStore = create<SettingsState>()(
                 ...(autoTtsEnabled !== undefined && { ttsEnabled: autoTtsEnabled }),
               };
             });
-          } catch (e) {
+            clearPendingCodexRestore();
+          } catch {
+            finalizeFailedSync();
             // Silently fail — server providers are optional
-            log.warn('Failed to fetch server providers:', e);
+            log.warn('Failed to fetch server providers');
           }
         },
       };
@@ -1920,6 +2177,21 @@ export const useSettingsStore = create<SettingsState>()(
         onWriteRefused: () => recovery.rehydrate?.(),
       }),
       version: SETTINGS_PERSIST_VERSION,
+      // A rich Codex catalog is account-scoped server truth. Keep it in live
+      // UI state, but persist only the audited bundled snapshot so browser
+      // storage can never become a second last-known-good cache.
+      partialize: (state) => ({
+        ...state,
+        providersConfig: {
+          ...state.providersConfig,
+          'openai-codex': {
+            ...state.providersConfig['openai-codex'],
+            models: getBundledCodexModelCatalog(),
+            isServerConfigured: false,
+            serverModels: undefined,
+          },
+        },
+      }),
       // Migrate persisted state
       migrate: (persistedState: unknown, version: number) => {
         const state = persistedState as Partial<SettingsState>;
@@ -1956,7 +2228,11 @@ export const useSettingsStore = create<SettingsState>()(
         // Add default audio config if missing
         if (!state.ttsProvidersConfig || !state.asrProvidersConfig) {
           const defaultAudioConfig = getDefaultAudioConfig();
-          Object.assign(state, defaultAudioConfig);
+          for (const [key, value] of Object.entries(defaultAudioConfig)) {
+            if ((state as Record<string, unknown>)[key] === undefined) {
+              (state as Record<string, unknown>)[key] = value;
+            }
+          }
         }
         ensureBuiltInAudioProviders(state);
         ensureBuiltInWebSearchProviders(state);
@@ -2124,6 +2400,7 @@ export const useSettingsStore = create<SettingsState>()(
         ensureValidProviderSelections(state);
         ensureBuiltInAudioProviders(state);
         ensureBuiltInWebSearchProviders(state);
+        distrustPersistedOAuthSelection(state);
         state.thinkingConfigs = pruneThinkingConfigs(state.thinkingConfigs, state.providersConfig);
 
         return state;
@@ -2147,6 +2424,7 @@ export const useSettingsStore = create<SettingsState>()(
         ensureValidProviderSelections(merged as Partial<SettingsState>);
         stripLegacyServerBaseUrl(merged as Partial<SettingsState>);
         const typedMerged = merged as Partial<SettingsState>;
+        distrustPersistedOAuthSelection(typedMerged);
         typedMerged.thinkingConfigs = pruneThinkingConfigs(
           typedMerged.thinkingConfigs,
           typedMerged.providersConfig,

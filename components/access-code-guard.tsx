@@ -2,6 +2,7 @@
 
 import { useEffect, useState, ReactNode } from 'react';
 import { AccessCodeModal } from '@/components/access-code-modal';
+import { syncServerProvidersAfterAccessUnlock } from '@/lib/client/codex-oauth';
 import { useSettingsStore } from '@/lib/store/settings';
 
 export function AccessCodeGuard({ children }: { children: ReactNode }) {
@@ -37,23 +38,14 @@ export function AccessCodeGuard({ children }: { children: ReactNode }) {
 
   const needsAuth = !status.loading && status.enabled && !status.authenticated;
 
+  const handleSuccess = () => {
+    setStatus((current) => ({ ...current, authenticated: true }));
+    void syncServerProvidersAfterAccessUnlock(() => useSettingsStore.getState());
+  };
+
   return (
     <>
-      {needsAuth && (
-        <AccessCodeModal
-          open={true}
-          onSuccess={() => {
-            setStatus((s) => ({ ...s, authenticated: true }));
-            // ServerProvidersInit runs on mount, which on an ACCESS_CODE-gated
-            // deployment is before any access cookie exists: the middleware
-            // answers 401 and the store silently keeps its blank defaults.
-            // Nothing re-fetches afterwards, so every server-configured
-            // provider reads as unconfigured until a manual reload. Re-fetch
-            // now that the request will be authorized.
-            void useSettingsStore.getState().fetchServerProviders();
-          }}
-        />
-      )}
+      {needsAuth && <AccessCodeModal open={true} onSuccess={handleSuccess} />}
       {children}
     </>
   );
