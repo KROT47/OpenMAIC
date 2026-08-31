@@ -1259,7 +1259,7 @@ export async function runSession(ctx: RunContext, meta: ClaimedAgentSession): Pr
       });
     }
 
-    const driver = await resolveAgentDriverModel();
+    const driver = await resolveAgentDriverModel({ kind: 'agent-edit', id });
     const streamFn = createCallLlmStreamFn({
       languageModel: driver.connection.model,
       maxOutputTokens: driver.wireMaxOutputTokens,

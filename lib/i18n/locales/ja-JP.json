@@ -55,6 +55,14 @@
     "exportFailed": "エクスポートに失敗しました",
     "classroomZip": "教室ZIPをエクスポート",
     "classroomZipDesc": "コース構造 + メディアファイル",
+    "scriptMd": "スクリプトをダウンロード (.md)",
+    "scriptMdDesc": "ナレーション文をMarkdownとして",
+    "script": "スクリプトをダウンロード",
+    "scriptDocx": "スクリプトをダウンロード (.docx)",
+    "scriptDocxDesc": "本物のWord文書（DOCX形式）",
+    "slideFallback": "スライド {{order}}",
+    "textOnly": "スクリプトをエクスポート",
+    "mediaPending": "メディアの生成完了を待っています",
     "inlinePartial": "{{count}} 個の外部リソースをバンドルできませんでした。オフラインでは正しく表示されない可能性があります。",
     "video": "動画をエクスポート",
     "videoDesc": "自己完結型 Hyperframes プロジェクト（MP4 にレンダリング可能）",
@@ -65,17 +73,6 @@
     "videoSuccess": "動画プロジェクトをエクスポートしました",
     "videoFailed": "動画のエクスポートに失敗しました",
     "videoWarnings": "{{assets}} 個の素材が不足しており、エクスポートレポートに {{diagnostics}} 件の問題があります。",
-    "noSlides": "エクスポート可能なスライドがありません",
-    "noSlidesSkipped": "このコースにスライドがないため、PPTX をスキップしました",
-    "nothingToExport": "エクスポートできるものがありません",
-    "scriptMd": "スクリプトをダウンロード (.md)",
-    "scriptMdDesc": "ナレーション文をMarkdownとして",
-    "script": "スクリプトをダウンロード",
-    "scriptDocx": "スクリプトをダウンロード (.docx)",
-    "scriptDocxDesc": "本物のWord文書（DOCX形式）",
-    "slideFallback": "スライド {{order}}",
-    "textOnly": "スクリプトをエクスポート",
-    "mediaPending": "メディアの生成完了を待っています",
     "videoMp4Success": "動画をレンダリングしました",
     "videoServiceUnavailable": "レンダーサービスが未設定です — ローカルレンダリング用にプロジェクト ZIP をダウンロードしました。",
     "videoResolution": "解像度",
@@ -100,7 +97,10 @@
     "subtitlesCompiling": "字幕を生成中…",
     "subtitlesSuccess": "字幕をダウンロードしました",
     "subtitlesEmpty": "字幕にできるナレーションがありません",
-    "subtitlesFailed": "字幕のダウンロードに失敗しました"
+    "subtitlesFailed": "字幕のダウンロードに失敗しました",
+    "noSlides": "エクスポート可能なスライドがありません",
+    "noSlidesSkipped": "このコースにスライドがないため、PPTX をスキップしました",
+    "nothingToExport": "エクスポートできるものがありません"
   },
   "import": {
     "classroom": "教室をインポート",
@@ -135,6 +135,22 @@
       "emptyAgentResponses": "エージェントが空の応答を返したため、ディスカッションを停止しました。再試行するかモデル設定をご確認ください。",
       "streamInterrupted": "ストリームが予期せず終了し、ディスカッションが完了しませんでした。再度お試しください。"
     },
+    "elementReference": {
+      "button": "スライドを参照",
+      "unavailable": "現在の PPT スライドのみ参照できます",
+      "instruction": "スライド要素をクリック · Esc で終了",
+      "fallback": "その他のスライド要素（{{count}}）",
+      "clear": "スライド参照を解除",
+      "summary": {
+        "noText": "テキストなし",
+        "emptyContent": "内容なし",
+        "code": "コード",
+        "line": "線",
+        "imageMetadata": "画像（メタデータのみ）",
+        "videoMetadata": "動画（メタデータのみ）",
+        "audioMetadata": "音声（メタデータのみ）"
+      }
+    },
     "tabs": {
       "lecture": "ノート",
       "chat": "チャット"
@@ -151,22 +167,6 @@
       "qa": "Q&A",
       "discussion": "議論",
       "lecture": "講義"
-    },
-    "elementReference": {
-      "button": "スライドを参照",
-      "unavailable": "現在の PPT スライドのみ参照できます",
-      "instruction": "スライド要素をクリック · Esc で終了",
-      "fallback": "その他のスライド要素（{{count}}）",
-      "clear": "スライド参照を解除",
-      "summary": {
-        "noText": "テキストなし",
-        "emptyContent": "内容なし",
-        "code": "コード",
-        "line": "線",
-        "imageMetadata": "画像（メタデータのみ）",
-        "videoMetadata": "動画（メタデータのみ）",
-        "audioMetadata": "音声（メタデータのみ）"
-      }
     }
   },
   "actions": {
@@ -247,14 +247,8 @@
       "interactive": "インタラクティブ",
       "pbl": "PBL"
     },
-    "multiTab": {
-      "conflict": {
-        "title": "別のタブでこのコースを編集中です",
-        "body": "編集モードは同時に 1 つのタブのみが保持できます。他のタブを閉じる（またはセッションがタイムアウトするのを待つ）してから、このタブで編集を開始してください。",
-        "actionDismiss": "了解"
-      }
-    },
     "text": {
+      "toolbar": "テキストツールバー",
       "label": "テキスト",
       "font": "フォント",
       "fontDefault": "デフォルト",
@@ -269,19 +263,31 @@
       "alignCenter": "中央揃え",
       "alignRight": "右揃え",
       "bullet": "箇条書き",
-      "toolbar": "テキストツールバー",
       "colorHex": "カラーコード"
     },
+    "line": {
+      "toolbar": "線ツールバー",
+      "kind": "線の種類",
+      "color": "線の色",
+      "width": "線幅",
+      "style": "線のスタイル",
+      "start": "始点のスタイル",
+      "end": "終点のスタイル",
+      "straight": "直線",
+      "broken": "折れ線",
+      "broken2": "二重折れ線",
+      "curve": "曲線",
+      "cubic": "3次曲線",
+      "solid": "実線",
+      "dashed": "破線",
+      "dotted": "点線",
+      "none": "なし",
+      "arrow": "矢印",
+      "dot": "点"
+    },
     "insert": {
-      "textBox": "テキストボックス",
-      "dragToolbar": "挿入ツールを移動",
-      "dragToolbarKeyboard": "挿入ツールを移動：Enter または Space を押してから矢印キーで移動",
-      "image": "画像",
-      "imageDrop": "画像をドロップまたはクリックして選択",
-      "imageOr": "または画像 URL を貼り付け",
-      "imageUrlPlaceholder": "https://…",
-      "imageInsert": "挿入",
       "toolbar": "挿入ツールバー",
+      "textBox": "テキストボックス",
       "line": "線",
       "linePresets": {
         "straight": "直線",
@@ -301,8 +307,15 @@
       "chartLine": "折れ線グラフ",
       "chartPie": "円グラフ",
       "tableDimensions": "{{rows}} x {{columns}} 表",
+      "dragToolbar": "挿入ツールを移動",
+      "dragToolbarKeyboard": "挿入ツールを移動：Enter または Space を押してから矢印キーで移動",
       "collapseToolbar": "挿入ツールを折りたたむ",
       "expandToolbar": "挿入ツールを展開",
+      "image": "画像",
+      "imageDrop": "画像をドロップまたはクリックして選択",
+      "imageOr": "または画像 URL を貼り付け",
+      "imageUrlPlaceholder": "https://…",
+      "imageInsert": "挿入",
       "video": "動画",
       "videoDrop": "動画をドロップまたはクリックして選択",
       "videoOr": "または動画 URL を貼り付け",
@@ -313,6 +326,37 @@
       "audioOr": "または音声 URL を貼り付け",
       "audioUrlPlaceholder": "https://…",
       "audioInsert": "挿入"
+    },
+    "asset": {
+      "drop": "ファイルをドロップまたはクリックして選択",
+      "orUrl": "またはファイル URL を貼り付け",
+      "urlPlaceholder": "https://…",
+      "insert": "挿入",
+      "invalidType": "サポートされていないファイル形式",
+      "readFailed": "ファイルを読み込めません"
+    },
+    "latex": {
+      "toolbar": "数式ツールバー",
+      "editFormula": "数式を編集",
+      "dialog": "数式エディター",
+      "source": "LaTeX ソース",
+      "preview": "プレビュー",
+      "symbols": "記号",
+      "presets": "定型数式",
+      "invalidSource": "LaTeX ソースが無効です。"
+    },
+    "video": {
+      "toolbar": "動画ツールバー",
+      "poster": "ポスターを設定"
+    },
+    "audio": {
+      "toolbar": "音声ツールバー",
+      "preview": "音声を試聴",
+      "pause": "試聴を一時停止",
+      "loop": "繰り返し再生"
+    },
+    "table": {
+      "doubleClickToEdit": "ダブルクリックして編集"
     },
     "nav": {
       "addSlide": "スライドを追加",
@@ -338,17 +382,38 @@
       "toBack": "最背面へ移動"
     },
     "image": {
+      "toolbar": "画像ツールバー",
       "replace": "画像を置き換え",
       "flipH": "左右反転",
       "flipV": "上下反転",
-      "toolbar": "画像ツールバー",
       "crop": "画像を切り抜く"
+    },
+    "contextMenu": {
+      "horizontalAlignment": "水平揃え",
+      "verticalAlignment": "垂直揃え",
+      "selectAll": "すべて選択",
+      "copy": "コピー",
+      "cut": "切り取り",
+      "paste": "貼り付け",
+      "unlock": "ロック解除",
+      "lock": "ロック",
+      "group": "グループ化",
+      "ungroup": "グループ解除",
+      "bringForward": "前面へ移動",
+      "sendBackward": "背面へ移動",
+      "alignTop": "上揃え",
+      "alignMiddle": "垂直中央揃え",
+      "alignBottom": "下揃え"
     },
     "background": {
       "label": "背景",
       "solid": "単色",
       "image": "画像",
       "color": "色"
+    },
+    "common": {
+      "cancel": "キャンセル",
+      "confirm": "確定"
     },
     "quiz": {
       "addQuestion": "問題を追加",
@@ -398,6 +463,7 @@
       "discussion": "ディスカッション"
     },
     "element": {
+      "toolbar": "要素ツールバー",
       "text": "テキスト",
       "image": "画像",
       "shape": "図形",
@@ -407,8 +473,7 @@
       "latex": "数式",
       "video": "動画",
       "audio": "音声",
-      "code": "コード",
-      "toolbar": "要素ツールバー"
+      "code": "コード"
     },
     "agent": {
       "expand": "AIアシスタントを開く",
@@ -493,14 +558,14 @@
       "discussionDesc": "問いを投げかけ、発言者を指定"
     },
     "tts": {
+      "cancelPreview": "試聴をキャンセル",
       "preview": "試聴",
       "regenerate": "音声を再生成",
       "statusReady": "音声あり",
       "statusNone": "音声なし",
       "statusGenerating": "生成中",
-      "statusError": "失敗",
-      "cancelPreview": "試聴をキャンセル",
-      "stopPreview": "試聴を停止"
+      "stopPreview": "試聴を停止",
+      "statusError": "失敗"
     },
     "pick": {
       "pickFor": "「{{label}}」の要素を選択",
@@ -553,78 +618,6 @@
       "notApplied": "未適用",
       "applyFailed": "エディターで要素の編集を適用できませんでした。変更はありません。",
       "applyPartiallyFailed": "一部の要素編集を適用できませんでした。ほかの編集は適用されている可能性があります。"
-    },
-    "line": {
-      "toolbar": "線ツールバー",
-      "kind": "線の種類",
-      "color": "線の色",
-      "width": "線幅",
-      "style": "線のスタイル",
-      "start": "始点のスタイル",
-      "end": "終点のスタイル",
-      "straight": "直線",
-      "broken": "折れ線",
-      "broken2": "二重折れ線",
-      "curve": "曲線",
-      "cubic": "3次曲線",
-      "solid": "実線",
-      "dashed": "破線",
-      "dotted": "点線",
-      "none": "なし",
-      "arrow": "矢印",
-      "dot": "点"
-    },
-    "asset": {
-      "drop": "ファイルをドロップまたはクリックして選択",
-      "orUrl": "またはファイル URL を貼り付け",
-      "urlPlaceholder": "https://…",
-      "insert": "挿入",
-      "invalidType": "サポートされていないファイル形式",
-      "readFailed": "ファイルを読み込めません"
-    },
-    "latex": {
-      "toolbar": "数式ツールバー",
-      "editFormula": "数式を編集",
-      "dialog": "数式エディター",
-      "source": "LaTeX ソース",
-      "preview": "プレビュー",
-      "symbols": "記号",
-      "presets": "定型数式",
-      "invalidSource": "LaTeX ソースが無効です。"
-    },
-    "video": {
-      "toolbar": "動画ツールバー",
-      "poster": "ポスターを設定"
-    },
-    "audio": {
-      "toolbar": "音声ツールバー",
-      "preview": "音声を試聴",
-      "pause": "試聴を一時停止",
-      "loop": "繰り返し再生"
-    },
-    "table": {
-      "doubleClickToEdit": "ダブルクリックして編集"
-    },
-    "contextMenu": {
-      "horizontalAlignment": "水平揃え",
-      "verticalAlignment": "垂直揃え",
-      "selectAll": "すべて選択",
-      "copy": "コピー",
-      "cut": "切り取り",
-      "paste": "貼り付け",
-      "unlock": "ロック解除",
-      "lock": "ロック",
-      "group": "グループ化",
-      "ungroup": "グループ解除",
-      "bringForward": "前面へ移動",
-      "sendBackward": "背面へ移動",
-      "alignTop": "上揃え",
-      "alignMiddle": "垂直中央揃え",
-      "alignBottom": "下揃え"
-    },
-    "common": {
-      "cancel": "キャンセル",
-      "confirm": "確定"
     },
     "roster": {
       "title": "クラス編成",
@@ -740,67 +733,7 @@
     "startRecording": "録音を開始"
   },
   "pbl": {
-    "legacyFormat": "このPBLシーンは旧形式です。コースを再生成してください。",
     "emptyProject": "PBLプロジェクトがまだ生成されていません。コース生成から作成してください。",
-    "roleSelection": {
-      "title": "役割を選択",
-      "description": "プロジェクトでの協力を始めるために役割を選んでください"
-    },
-    "workspace": {
-      "restart": "リスタート",
-      "confirmRestart": "すべての進捗をリセットしますか？",
-      "confirm": "確認",
-      "cancel": "キャンセル"
-    },
-    "issueboard": {
-      "title": "課題ボード",
-      "noIssues": "課題はまだありません",
-      "statusDone": "完了",
-      "statusActive": "進行中",
-      "statusPending": "未着手"
-    },
-    "chat": {
-      "title": "プロジェクトディスカッション",
-      "currentIssue": "現在の課題",
-      "mentionHint": "@question で質問、@judge で提出・レビュー依頼",
-      "placeholder": "メッセージを入力...",
-      "send": "送信",
-      "issueCompleteMessage": "課題「{{completed}}」が完了しました！次の課題に進みます：「{{next}}」",
-      "allCompleteMessage": "🎉 すべての課題が完了しました！プロジェクトお疲れさまでした！"
-    },
-    "guide": {
-      "howItWorks": "使い方",
-      "help": "ヘルプ",
-      "title": "ヘルプ",
-      "step1": {
-        "title": "ステップ1：役割を選ぶ",
-        "desc": "プロジェクト生成後、リストから役割を選択してください（🟢マークの非システム役割）"
-      },
-      "step2": {
-        "title": "ステップ2：課題に取り組む",
-        "desc": "各課題は学習タスクです：",
-        "s1": {
-          "title": "現在の課題を確認",
-          "desc": "課題のタイトル、説明、担当者を確認します"
-        },
-        "s2": {
-          "title": "ガイダンスを受ける",
-          "example": "@question どこから始めればいいですか？\n@question この機能はどう実装しますか？",
-          "desc": "質問エージェントがヒントや誘導質問を提供します（直接的な答えは出しません）"
-        },
-        "s3": {
-          "title": "成果を提出する",
-          "example": "@judge 完了しました。ノートを確認してください",
-          "desc": "審査エージェントが成果を評価しフィードバックします：",
-          "complete": "自動的に次の課題に進みます",
-          "revision": "フィードバックに基づいて改善してください"
-        }
-      },
-      "step3": {
-        "title": "ステップ3：プロジェクトを完了する",
-        "desc": "すべての課題が完了すると「🎉 プロジェクト完了！」と表示されます"
-      }
-    },
     "v2": {
       "hero": {
         "title": "プロジェクトベースドラーニング",
@@ -1281,6 +1214,7 @@
       "azure": "Azure OpenAI",
       "anthropic": "Claude",
       "google": "Gemini",
+      "bedrock": "Amazon Bedrock",
       "deepseek": "DeepSeek",
       "qwen": "Qwen",
       "kimi": "Kimi",
@@ -1298,10 +1232,9 @@
       "bocha": "Bocha",
       "brave": "Brave Search",
       "baidu": "Baidu",
+      "claude": "Claude",
       "searxng": "SearXNG",
-      "openai-codex": "Codex",
-      "bedrock": "Amazon Bedrock",
-      "claude": "Claude"
+      "openai-codex": "Codex"
     },
     "providerTypes": {
       "openai": "OpenAIプロトコル",
@@ -1506,9 +1439,20 @@
     "voxcpmStopPreview": "試聴を停止",
     "voxcpmPreviewVoice": "音色を試聴",
     "voxcpmDeleteVoice": "音色を削除",
+    "qwenCloneVoicesTitle": "Qwen TTS Cloned Voices",
+    "qwenCloneRefText": "Enter the verbatim transcript of the reference audio",
+    "qwenCloneRefAudioHint": "Use a clean 1–60 second voice sample. A 10–20 second sample is recommended; audio is converted to 24 kHz mono PCM WAV.",
+    "qwenCloneSaved": "Qwen cloned voice registered and saved",
+    "qwenCloneSaveFailed": "Failed to register the Qwen cloned voice",
+    "qwenCloneUnsupported": "Recording is not supported in this browser; upload an audio file instead.",
+    "qwenCloneSpeedHint": "Cloned voices always synthesize at 1× speed.",
+    "qwenCloneDeleteWarning": "The voice was removed locally, but provider deletion failed.",
+    "qwenCloneNarrationUnavailable": "The assigned voice is unavailable. Narration will use another enabled voice instead.",
+    "qwenCloneDiscussionUnavailable": "The assigned voice is unavailable. Discussion will use another enabled voice instead.",
     "providerOpenAIWhisper": "OpenAI ASR (gpt-4o-mini-transcribe)",
     "providerBrowserNative": "ブラウザネイティブASR",
     "providerQwenASR": "Qwen ASR（Alibaba Cloud百錬）",
+    "providerFunASRASR": "FunASR（ローカル）",
     "providerLemonadeASR": "Lemonade ASR（ローカル）",
     "providerAzureASR": "Azure STT",
     "providerUnpdf": "unpdf（組み込み）",
@@ -1771,14 +1715,6 @@
     "testImageConnectivity": "接続テスト",
     "imageConnectivitySuccess": "画像サービスへの接続に成功しました",
     "imageConnectivityFailed": "画像サービスへの接続に失敗しました",
-    "providerCodexImage": "Codex",
-    "codexImageLoginRequired": "画像生成を使うには「LLMプロバイダー → Codex」でログインしてください。",
-    "codexImageConnected": "Codex に接続済み",
-    "codexImageManageLogin": "Codex ログインを管理",
-    "codexImageFixedModel": "固定モデル",
-    "codexImageTestHint": "画像を生成せず、画像枠を消費せずに Codex ログインだけを確認します。",
-    "codexImagePlanLimits": "Codex ログインと ChatGPT プラン枠を使用します。画像はテキストより多くの枠を使う場合があります。",
-    "codexImageLoginValid": "Codex ログインで画像生成を利用できます",
     "imageTestSuccess": "画像生成テストに成功しました",
     "imageTestFailed": "画像生成テストに失敗しました",
     "imageTestPromptPlaceholder": "テスト用の画像の説明を入力",
@@ -1835,11 +1771,16 @@
     "clearCacheButton": "すべてのデータを完全に削除",
     "clearCacheSuccess": "キャッシュをクリアしました。まもなくページが更新されます",
     "clearCacheFailed": "キャッシュのクリアに失敗しました。もう一度お試しください",
+    "clearCacheBlockedByOtherTabs": "このアプリを開いている他のタブを閉じて、もう一度お試しください。",
+    "persistUnavailable": "変更が保存されていません。アプリが保存済みデータにアクセスできません。再読み込みしても解決しない場合は、設定からローカルキャッシュを削除してください。",
+    "persistChangesLost": "ストレージは復旧しましたが、利用できなかった間の変更は保存できず、最後に保存された内容に戻りました。",
     "webSearchSettings": "ウェブ検索",
     "webSearchApiKey": "検索APIキー",
     "webSearchApiKeyPlaceholder": "検索APIキーを入力",
     "webSearchApiKeyPlaceholderServer": "サーバーキー設定済み、任意で上書き",
     "webSearchApiKeyHint": "選択した検索プロバイダーからAPIキーを取得してください",
+    "claudeSearchModel": "検索モデル",
+    "claudeSearchModelHint": "ウェブ検索を実行し、結果を要約する Claude モデル。",
     "webSearchApiKeyOptional": "APIキーは任意です。未設定の場合、公開ページのスクレイピングが使用されます。",
     "searxngServerOnlyNotice": "SearXNG はサーバー側で設定する必要があります。SEARXNG_BASE_URL 環境変数（または server-providers.yml の web-search セクション）を設定してください。クライアントからのインスタンス URL は受け付けません。",
     "baiduSubSources": "Baidu検索ソース",
@@ -1904,9 +1845,44 @@
       "capabilities": "Capabilities offered",
       "offeredNote": "Models offered by this plan. Pick the ones you want on the generation bar — availability depends on your plan tier, and unsupported models will error at generation time."
     },
+    "skills": {
+      "nav": "スキル",
+      "title": "スキル設定",
+      "description": "アカウントにインストールされているスキルを閲覧し、詳細を確認して、zip としてダウンロードして共有・バックアップできます。",
+      "mySkills": "マイスキル",
+      "builtinSkills": "内蔵スキル",
+      "emptyMySkills": "まだ自分のスキルがありません——チャットでエージェントに履歴から作成させましょう。",
+      "emptyBuiltinSkills": "利用可能な内蔵スキルはありません。",
+      "listFailed": "スキル一覧を読み込めませんでした",
+      "retry": "再試行",
+      "badgeBuiltin": "内蔵",
+      "badgeOwner": "マイスキル",
+      "badgeConstraints": "制約あり",
+      "details": "詳細",
+      "download": "ダウンロード",
+      "detailFailed": "スキル詳細を読み込めませんでした",
+      "contentLabel": "内容",
+      "builtinDetailNote": "このスキルは OpenMAIC に同梱されています。他のエージェントワークスペースにインポートするにはダウンロードしてください。",
+      "upload": "アップロード",
+      "uploading": "アップロード中…",
+      "uploadFailed": "スキルをアップロードできませんでした。ファイルを確認して再試行してください。",
+      "delete": "削除",
+      "deleting": "削除中…",
+      "deleteTitle": "スキルを削除しますか？",
+      "deleteConfirm": "このスキルをアカウントから削除します。この操作は元に戻せません。",
+      "deleteFailed": "スキルを削除できませんでした。もう一度お試しください。"
+    },
     "ttsBrowserNativeTimelineNotice": "ブラウザ内蔵 TTS はエディターのタイムライン音声機能（試聴・再生成・一括音声生成）に対応していません。マネージド TTS プロバイダーに切り替えると、行ごとの音声を生成・管理できます。",
     "alidocmindAccessKeyId": "AccessKey ID",
     "alidocmindAccessKeySecret": "AccessKey Secret",
+    "providerCodexImage": "Codex",
+    "codexImageLoginRequired": "画像生成を使うには「LLMプロバイダー → Codex」でログインしてください。",
+    "codexImageConnected": "Codex に接続済み",
+    "codexImageManageLogin": "Codex ログインを管理",
+    "codexImageFixedModel": "固定モデル",
+    "codexImageTestHint": "画像を生成せず、画像枠を消費せずに Codex ログインだけを確認します。",
+    "codexImagePlanLimits": "Codex ログインと ChatGPT プラン枠を使用します。画像はテキストより多くの枠を使う場合があります。",
+    "codexImageLoginValid": "Codex ログインで画像生成を利用できます",
     "codexOAuth": {
       "experimental": "実験的なサードパーティ Codex 連携です。ChatGPT プランの利用枠を使用します。",
       "unavailableTitle": "Codex サインインは利用できません",
@@ -1939,81 +1915,7 @@
       "loginFailed": "サインインに失敗しました。いずれかのサインイン方法を選んで再試行してください。",
       "loginExpired": "サインインの有効期限が切れました。もう一度開始してください。"
     },
-    "connected": "接続済み",
-    "qwenCloneVoicesTitle": "Qwen TTS Cloned Voices",
-    "qwenCloneRefText": "Enter the verbatim transcript of the reference audio",
-    "qwenCloneRefAudioHint": "Use a clean 1–60 second voice sample. A 10–20 second sample is recommended; audio is converted to 24 kHz mono PCM WAV.",
-    "qwenCloneSaved": "Qwen cloned voice registered and saved",
-    "qwenCloneSaveFailed": "Failed to register the Qwen cloned voice",
-    "qwenCloneUnsupported": "Recording is not supported in this browser; upload an audio file instead.",
-    "qwenCloneSpeedHint": "Cloned voices always synthesize at 1× speed.",
-    "qwenCloneDeleteWarning": "The voice was removed locally, but provider deletion failed.",
-    "qwenCloneNarrationUnavailable": "The assigned voice is unavailable. Narration will use another enabled voice instead.",
-    "qwenCloneDiscussionUnavailable": "The assigned voice is unavailable. Discussion will use another enabled voice instead.",
-    "providerFunASRASR": "FunASR（ローカル）",
-    "clearCacheBlockedByOtherTabs": "このアプリを開いている他のタブを閉じて、もう一度お試しください。",
-    "persistUnavailable": "変更が保存されていません。アプリが保存済みデータにアクセスできません。再読み込みしても解決しない場合は、設定からローカルキャッシュを削除してください。",
-    "persistChangesLost": "ストレージは復旧しましたが、利用できなかった間の変更は保存できず、最後に保存された内容に戻りました。",
-    "claudeSearchModel": "検索モデル",
-    "claudeSearchModelHint": "ウェブ検索を実行し、結果を要約する Claude モデル。",
-    "skills": {
-      "nav": "スキル",
-      "title": "スキル設定",
-      "description": "アカウントにインストールされているスキルを閲覧し、詳細を確認して、zip としてダウンロードして共有・バックアップできます。",
-      "mySkills": "マイスキル",
-      "builtinSkills": "内蔵スキル",
-      "emptyMySkills": "まだ自分のスキルがありません——チャットでエージェントに履歴から作成させましょう。",
-      "emptyBuiltinSkills": "利用可能な内蔵スキルはありません。",
-      "listFailed": "スキル一覧を読み込めませんでした",
-      "retry": "再試行",
-      "badgeBuiltin": "内蔵",
-      "badgeOwner": "マイスキル",
-      "badgeConstraints": "制約あり",
-      "details": "詳細",
-      "download": "ダウンロード",
-      "detailFailed": "スキル詳細を読み込めませんでした",
-      "contentLabel": "内容",
-      "builtinDetailNote": "このスキルは OpenMAIC に同梱されています。他のエージェントワークスペースにインポートするにはダウンロードしてください。",
-      "upload": "アップロード",
-      "uploading": "アップロード中…",
-      "uploadFailed": "スキルをアップロードできませんでした。ファイルを確認して再試行してください。",
-      "delete": "削除",
-      "deleting": "削除中…",
-      "deleteTitle": "スキルを削除しますか？",
-      "deleteConfirm": "このスキルをアカウントから削除します。この操作は元に戻せません。",
-      "deleteFailed": "スキルを削除できませんでした。もう一度お試しください。"
-    }
-  },
-  "profile": {
-    "title": "プロフィール",
-    "defaultNickname": "学習者",
-    "chooseAvatar": "アバターを選択",
-    "uploadAvatar": "アップロード",
-    "bioPlaceholder": "自己紹介を入力してください。AI教師があなたに合わせた授業を行います...",
-    "avatarHint": "アバターは教室のディスカッションやチャットに表示されます",
-    "fileTooLarge": "画像が大きすぎます。5MB以下のファイルを選択してください",
-    "invalidFileType": "画像ファイルを選択してください",
-    "editTooltip": "クリックしてプロフィールを編集"
-  },
-  "media": {
-    "imageCapability": "画像生成",
-    "imageHint": "スライドに画像を生成",
-    "videoCapability": "動画生成",
-    "videoHint": "スライドに動画を生成",
-    "ttsCapability": "音声合成",
-    "ttsHint": "AI教師が声で話します",
-    "asrCapability": "音声認識",
-    "asrHint": "ディスカッションで音声入力",
-    "provider": "プロバイダー",
-    "model": "モデル",
-    "voice": "ボイス",
-    "speed": "速度",
-    "language": "言語"
-  },
-  "accessCode": {
-    "title": "アクセスコードを入力",
-    "placeholder": "アクセスコード",
-    "error": "アクセスコードが正しくありません。もう一度お試しください。"
+    "connected": "接続済み"
   },
   "workspace": {
     "untitledCourse": "未命名课堂",
@@ -2110,6 +2012,37 @@
     "courseTabClose": "タブを閉じる：{{name}}",
     "courseTabRunning": "生成中",
     "foldersUnavailable": "このビルドではフォルダーは利用できません"
+  },
+  "profile": {
+    "title": "プロフィール",
+    "defaultNickname": "学習者",
+    "chooseAvatar": "アバターを選択",
+    "uploadAvatar": "アップロード",
+    "bioPlaceholder": "自己紹介を入力してください。AI教師があなたに合わせた授業を行います...",
+    "avatarHint": "アバターは教室のディスカッションやチャットに表示されます",
+    "fileTooLarge": "画像が大きすぎます。5MB以下のファイルを選択してください",
+    "invalidFileType": "画像ファイルを選択してください",
+    "editTooltip": "クリックしてプロフィールを編集"
+  },
+  "media": {
+    "imageCapability": "画像生成",
+    "imageHint": "スライドに画像を生成",
+    "videoCapability": "動画生成",
+    "videoHint": "スライドに動画を生成",
+    "ttsCapability": "音声合成",
+    "ttsHint": "AI教師が声で話します",
+    "asrCapability": "音声認識",
+    "asrHint": "ディスカッションで音声入力",
+    "provider": "プロバイダー",
+    "model": "モデル",
+    "voice": "ボイス",
+    "speed": "速度",
+    "language": "言語"
+  },
+  "accessCode": {
+    "title": "アクセスコードを入力",
+    "placeholder": "アクセスコード",
+    "error": "アクセスコードが正しくありません。もう一度お試しください。"
   },
   "proMode": {
     "attach": "教材を添付",

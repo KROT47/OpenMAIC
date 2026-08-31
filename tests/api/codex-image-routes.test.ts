@@ -11,7 +11,10 @@ const mocks = vi.hoisted(() => ({
   genericConnectivity: vi.fn(),
   resolveKey: vi.fn(),
   resolveBaseUrl: vi.fn(),
+  resolveModel: vi.fn(),
+  resolveProviderId: vi.fn(),
   isServerConfigured: vi.fn(),
+  isServerDisabled: vi.fn(),
   validateUrl: vi.fn(),
   recordUsage: vi.fn(),
   log: {
@@ -55,8 +58,11 @@ vi.mock('@/lib/media/image-providers', () => ({
 
 vi.mock('@/lib/server/provider-config', () => ({
   isServerConfiguredProvider: mocks.isServerConfigured,
+  isServerProviderDisabled: mocks.isServerDisabled,
   resolveImageApiKey: mocks.resolveKey,
   resolveImageBaseUrl: mocks.resolveBaseUrl,
+  resolveImageModel: mocks.resolveModel,
+  resolveServerImageProviderId: mocks.resolveProviderId,
 }));
 
 vi.mock('@/lib/server/ssrf-guard', () => ({
@@ -105,6 +111,9 @@ describe('/api/generate/image Codex branch', () => {
       tokenProvider: { getValidCredentials: mocks.getValidCredentials },
     });
     mocks.getAvailability.mockResolvedValue({ available: true });
+    mocks.isServerDisabled.mockReturnValue(false);
+    mocks.resolveModel.mockReturnValue(undefined);
+    mocks.resolveProviderId.mockReturnValue(undefined);
     mocks.transport.mockResolvedValue({ base64: 'image-data', width: 1536, height: 864 });
     mocks.recordUsage.mockResolvedValue(undefined);
   });
@@ -298,6 +307,9 @@ describe('/api/verify-image-provider Codex branch', () => {
       tokenProvider: { getValidCredentials: mocks.getValidCredentials },
     });
     mocks.getAvailability.mockResolvedValue({ available: true });
+    mocks.isServerDisabled.mockReturnValue(false);
+    mocks.resolveModel.mockReturnValue(undefined);
+    mocks.resolveProviderId.mockReturnValue(undefined);
   });
 
   it('checks OAuth credentials without creating an image transport', async () => {

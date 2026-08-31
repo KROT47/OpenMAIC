@@ -15,6 +15,7 @@ import {
   isQwenVoiceCloneModel,
   TTS_PROVIDERS,
 } from '@/lib/audio/constants';
+import { stripNativeCredentialProviders } from '@/lib/server/providers/server-config-policy';
 
 const log = createLogger('ServerProviderConfig');
 
@@ -353,7 +354,6 @@ const DEFAULT_FILENAME = 'server-providers.yml';
 const OPENAI_IMAGE_PROVIDER_ID = 'openai-image';
 const ALIDOCMIND_PROVIDER_ID = 'alidocmind';
 const BEDROCK_PROVIDER_ID = 'bedrock';
-const NATIVE_CODEX_PROVIDER_ID = 'openai-codex';
 
 /** Cache keyed by YAML filename (empty string = default file). */
 const _configs: Map<string, ServerConfig> = new Map();
@@ -503,16 +503,14 @@ function buildConfig(yamlData: YamlData): ServerConfig {
     }),
     yamlData.image,
   );
-  const providers = applyBedrockProviderConfig(
-    loadEnvSection(LLM_ENV_MAP, yamlData.providers, {
-      keylessProviders: new Set(['ollama', 'lemonade', BEDROCK_PROVIDER_ID]),
-    }),
-    yamlData.providers,
+  const providers = stripNativeCredentialProviders(
+    applyBedrockProviderConfig(
+      loadEnvSection(LLM_ENV_MAP, yamlData.providers, {
+        keylessProviders: new Set(['ollama', 'lemonade', BEDROCK_PROVIDER_ID]),
+      }),
+      yamlData.providers,
+    ),
   );
-
-  // Native Codex OAuth owns this ID. Generic YAML/env credentials must never
-  // turn it into a client-overridable OpenAI-compatible provider.
-  delete providers[NATIVE_CODEX_PROVIDER_ID];
 
   return {
     providers,

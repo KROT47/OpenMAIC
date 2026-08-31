@@ -112,6 +112,7 @@ describe('native Codex provider seam', () => {
     });
 
     expect(openAiMocks.createOpenAI).toHaveBeenLastCalledWith({
+      name: 'openai-codex',
       apiKey: 'openmaic-codex-oauth',
       baseURL: 'https://chatgpt.com/backend-api/codex',
       fetch: transport,

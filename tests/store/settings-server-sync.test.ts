@@ -336,7 +336,7 @@ describe('settings rehydrate — built-in provider models', () => {
 
   it('distrusts persisted Codex image credentials and connected state', async () => {
     storage.set(
-      'settings-storage',
+      SETTINGS_KV_KEY,
       JSON.stringify({
         state: {
           imageProviderId: 'codex-image',
@@ -497,7 +497,7 @@ describe('settings rehydrate — built-in provider models', () => {
 
   it('distrusts persisted Codex server state, credentials, and dynamic models', async () => {
     storage.set(
-      'settings-storage',
+      SETTINGS_KV_KEY,
       JSON.stringify({
         state: {
           providerId: 'openai-codex',
@@ -577,7 +577,7 @@ describe('fetchServerProviders — provider availability sync', () => {
         },
       };
       storage.set(
-        'settings-storage',
+        SETTINGS_KV_KEY,
         JSON.stringify({
           state: {
             providerId: 'openai-codex',
@@ -614,14 +614,14 @@ describe('fetchServerProviders — provider availability sync', () => {
       await store.getState().fetchServerProviders();
       expectFastClosedBaseline();
 
-      const persisted = JSON.parse(storage.get('settings-storage')!) as {
-        state: { providersConfig: Record<string, { models: ModelInfo[] }> };
+      const persisted = (await readPersistedState()) as {
+        providersConfig: Record<string, { models: ModelInfo[] }>;
       };
+      expect(persisted.providersConfig['openai-codex'].models.map((model) => model.id)).toEqual(
+        baselineIds,
+      );
       expect(
-        persisted.state.providersConfig['openai-codex'].models.map((model) => model.id),
-      ).toEqual(baselineIds);
-      expect(
-        persisted.state.providersConfig['openai-codex'].models.every(
+        persisted.providersConfig['openai-codex'].models.every(
           (model) => !model.capabilities?.serviceTiers,
         ),
       ).toBe(true);
@@ -829,12 +829,12 @@ describe('fetchServerProviders — provider availability sync', () => {
       },
     ]);
     expect(store.getState().providersConfig['openai-codex'].models).toHaveLength(1);
-    const persisted = JSON.parse(storage.get('settings-storage')!) as {
-      state: { providersConfig: Record<string, { models: ModelInfo[] }> };
+    const persisted = (await readPersistedState()) as {
+      providersConfig: Record<string, { models: ModelInfo[] }>;
     };
-    expect(
-      persisted.state.providersConfig['openai-codex'].models.map((model) => model.id),
-    ).not.toContain('gpt-live');
+    expect(persisted.providersConfig['openai-codex'].models.map((model) => model.id)).not.toContain(
+      'gpt-live',
+    );
   });
 
   it('clears discovered fast capabilities when native OAuth disappears', async () => {

@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { BrowserKVStore } from '@openmaic/storage';
 
 const storage = new Map<string, string>();
 const localStorageStub = {
@@ -13,14 +14,28 @@ const localStorageStub = {
 vi.stubGlobal('localStorage', localStorageStub);
 vi.stubGlobal('window', { localStorage: localStorageStub });
 
+const persistKv = new BrowserKVStore({ storage: localStorageStub as unknown as Storage });
+
 async function freshStore(persistedState?: Record<string, unknown>) {
   vi.resetModules();
   storage.clear();
   if (persistedState) {
-    storage.set('settings-storage', JSON.stringify({ state: persistedState, version: 4 }));
+    await persistKv.set('settings-storage', { state: persistedState, version: 4 }, 'account');
   }
   const { useSettingsStore } = await import('@/lib/store/settings');
+  await useSettingsStore.persist.rehydrate();
   return useSettingsStore;
+}
+
+async function readPersistedState(): Promise<Record<string, unknown>> {
+  return await vi.waitFor(async () => {
+    const blob = await persistKv.get<{ state: Record<string, unknown> }>(
+      'settings-storage',
+      'account',
+    );
+    expect(blob).not.toBeNull();
+    return blob!.state;
+  });
 }
 
 describe('Codex fast mode preference', () => {
@@ -38,7 +53,7 @@ describe('Codex fast mode preference', () => {
     store.getState().setCodexFastMode(true);
 
     expect(store.getState().codexFastMode).toBe(true);
-    expect(JSON.parse(storage.get('settings-storage')!).state.codexFastMode).toBe(true);
+    expect((await readPersistedState()).codexFastMode).toBe(true);
   });
 
   it('hydrates an older settings blob with the default off', async () => {

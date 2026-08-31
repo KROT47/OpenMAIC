@@ -829,31 +829,34 @@ describe('Codex language model middleware', () => {
       ]) as never,
     }));
     const model = wrapCodexLanguageModel(createLanguageModel({ doStream }));
-    const prompt = toModelMessages([
-      {
-        role: 'assistant',
-        content: [
-          {
-            type: 'thinking',
-            thinking: 'legacy summary',
-            thinkingSignature: `${OPENAI_REASONING_SIGNATURE_PREFIX}{"itemId":"legacy-reasoning-item"}`,
+    const prompt = toModelMessages(
+      [
+        {
+          role: 'assistant',
+          content: [
+            {
+              type: 'thinking',
+              thinking: 'legacy summary',
+              thinkingSignature: `${OPENAI_REASONING_SIGNATURE_PREFIX}{"itemId":"legacy-reasoning-item"}`,
+            },
+          ],
+          api: 'unknown',
+          provider: 'unknown',
+          model: 'test',
+          usage: {
+            input: 0,
+            output: 0,
+            cacheRead: 0,
+            cacheWrite: 0,
+            totalTokens: 0,
+            cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
           },
-        ],
-        api: 'unknown',
-        provider: 'unknown',
-        model: 'test',
-        usage: {
-          input: 0,
-          output: 0,
-          cacheRead: 0,
-          cacheWrite: 0,
-          totalTokens: 0,
-          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
-        },
-        stopReason: 'stop',
-        timestamp: 0,
-      } as never,
-    ]);
+          stopReason: 'stop',
+          timestamp: 0,
+        } as never,
+      ],
+      { includeReasoning: true },
+    );
     expect(prompt).toEqual([
       {
         role: 'assistant',

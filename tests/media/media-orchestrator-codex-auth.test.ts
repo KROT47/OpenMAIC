@@ -136,7 +136,6 @@ describe('media orchestrator Codex auth invalidation', () => {
     expect(mocks.mediaStore.markDone).toHaveBeenCalledWith(
       'image-1',
       'blob:codex-image-page-ready',
-      undefined,
     );
     expect(mocks.mediaStore.markFailed).not.toHaveBeenCalled();
   });

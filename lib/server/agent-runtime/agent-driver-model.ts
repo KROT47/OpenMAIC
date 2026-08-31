@@ -1,5 +1,6 @@
 import type { Api, Model } from '@earendil-works/pi-ai';
 
+import type { ModelLogicalSession } from '@/lib/server/model-logical-session';
 import { getStageRoute } from '@/lib/server/model-routes';
 import { resolveModel, type ResolvedModel } from '@/lib/server/resolve-model';
 
@@ -46,7 +47,7 @@ export function buildPiDriverModel(
 }
 
 /** Resolve the driver from its dedicated route; DEFAULT_MODEL is never consulted. */
-export async function resolveAgentDriverModel(): Promise<{
+export async function resolveAgentDriverModel(logicalSession?: ModelLogicalSession): Promise<{
   connection: ResolvedModel;
   piModel: Model<Api>;
   /** Catalog-backed API limit; undefined means omit max_tokens on the wire. */
@@ -79,7 +80,10 @@ export async function resolveAgentDriverModel(): Promise<{
         `${modelId} cannot combine reasoning_effort with function tools on this transport.`,
     );
   }
-  const connection = await resolveModel({ stage: AGENT_DRIVER_STAGE });
+  const connection = await resolveModel({
+    stage: AGENT_DRIVER_STAGE,
+    ...(logicalSession ? { logicalSession } : {}),
+  });
   const wireMaxOutputTokens = connection.modelInfo?.outputWindow;
   return {
     connection,

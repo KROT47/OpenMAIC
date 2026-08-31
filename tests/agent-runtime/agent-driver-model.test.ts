@@ -99,6 +99,34 @@ describe('agent driver model route', () => {
     },
   );
 
+  it('passes a durable Workbench identity into Codex model resolution', async () => {
+    process.env.MODEL_ROUTES = JSON.stringify({
+      'maic-agent-driver': {
+        model: 'openai-codex:gpt-5.6-sol',
+        api: 'openai-responses',
+      },
+    });
+    mocks.resolveModel.mockResolvedValue({
+      model: {},
+      modelInfo: { contextWindow: 1_050_000, outputWindow: 128_000 },
+      modelString: 'openai-codex:gpt-5.6-sol',
+      providerId: 'openai-codex',
+      modelId: 'gpt-5.6-sol',
+      apiKey: '',
+      thinkingConfig: undefined,
+    });
+    const { resolveAgentDriverModel } =
+      await import('@/lib/server/agent-runtime/agent-driver-model');
+    const logicalSession = { kind: 'agent-edit', id: 'workbench-session-1' } as const;
+
+    await resolveAgentDriverModel(logicalSession);
+
+    expect(mocks.resolveModel).toHaveBeenCalledWith({
+      stage: 'maic-agent-driver',
+      logicalSession,
+    });
+  });
+
   it('uses the provider catalog window when the model is known', async () => {
     process.env.MODEL_ROUTES = JSON.stringify({
       'maic-agent-driver': { model: 'openai:gpt-5.6-luna', api: 'openai-completions' },

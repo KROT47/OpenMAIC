@@ -41,7 +41,7 @@ async function openCodexSettings(page: HomePage['page'], connected = false) {
 test.describe.configure({ mode: 'serial' });
 
 test.describe('Codex OAuth settings', () => {
-  test('runs blocked-popup fallback, device completion, safe test, and logout fallback', async ({
+  test('runs blocked-popup recovery, device completion, safe test, and logout fallback', async ({
     page,
   }) => {
     let connected = false;
@@ -58,7 +58,7 @@ test.describe('Codex OAuth settings', () => {
 
     await page.addInitScript(
       ({ settings }) => {
-        localStorage.setItem('settings-storage', settings);
+        localStorage.setItem('maic:account:settings-storage', settings);
         Object.defineProperty(window, 'open', { configurable: true, value: () => null });
         Object.defineProperty(navigator, 'clipboard', {
           configurable: true,
@@ -160,6 +160,12 @@ test.describe('Codex OAuth settings', () => {
     await expect(page.locator('input[name^="llm-base-url-openai-codex"]')).toHaveCount(0);
 
     await page.getByRole('button', { name: 'Sign in with ChatGPT', exact: true }).click();
+    await expect(
+      page.getByText('Sign-in failed. Choose either sign-in method to try again.'),
+    ).toBeVisible();
+    expect(loginEvents.slice(-2)).toEqual(['POST browser', 'DELETE login']);
+
+    await page.getByRole('button', { name: 'Use device code' }).click();
     await expect(page.getByText('PLAY-WRITE', { exact: true })).toBeVisible();
     expect(loginEvents.slice(-3)).toEqual(['POST browser', 'DELETE login', 'POST device']);
     await expect(page.getByRole('link', { name: 'Open verification page' })).toHaveAttribute(
@@ -201,7 +207,7 @@ test.describe('Codex OAuth settings', () => {
     await expect
       .poll(async () =>
         page.evaluate(() => {
-          const raw = localStorage.getItem('settings-storage');
+          const raw = localStorage.getItem('maic:account:settings-storage');
           return raw ? JSON.parse(raw).state.codexFastMode : null;
         }),
       )
@@ -220,7 +226,7 @@ test.describe('Codex OAuth settings', () => {
     await expect
       .poll(async () =>
         page.evaluate(() => {
-          const raw = localStorage.getItem('settings-storage');
+          const raw = localStorage.getItem('maic:account:settings-storage');
           return raw ? JSON.parse(raw).state.providerId : null;
         }),
       )

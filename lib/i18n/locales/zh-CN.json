@@ -55,6 +55,14 @@
     "exportFailed": "导出失败",
     "classroomZip": "导出课堂 ZIP",
     "classroomZipDesc": "课程结构 + 媒体文件",
+    "scriptMd": "下载演讲稿 (.md)",
+    "scriptMdDesc": "以 Markdown 导出语音播报文字",
+    "script": "下载演讲稿",
+    "scriptDocx": "下载演讲稿 (.docx)",
+    "scriptDocxDesc": "真正的 Word DOCX 文档",
+    "slideFallback": "幻灯片 {{order}}",
+    "textOnly": "导出演讲稿",
+    "mediaPending": "等待媒体生成完成",
     "inlinePartial": "{{count}} 个外部资源未能打包，离线时课程可能无法正常显示。",
     "video": "导出视频",
     "videoDesc": "自包含 Hyperframes 工程（可渲染为 MP4）",
@@ -65,17 +73,6 @@
     "videoSuccess": "视频工程已导出",
     "videoFailed": "视频导出失败",
     "videoWarnings": "有 {{assets}} 个素材缺失，导出报告中有 {{diagnostics}} 个问题。",
-    "noSlides": "无可导出的幻灯片",
-    "noSlidesSkipped": "本课程无幻灯片，已跳过 PPTX",
-    "nothingToExport": "没有可导出的内容",
-    "scriptMd": "下载演讲稿 (.md)",
-    "scriptMdDesc": "以 Markdown 导出语音播报文字",
-    "script": "下载演讲稿",
-    "scriptDocx": "下载演讲稿 (.docx)",
-    "scriptDocxDesc": "真正的 Word DOCX 文档",
-    "slideFallback": "幻灯片 {{order}}",
-    "textOnly": "导出演讲稿",
-    "mediaPending": "等待媒体生成完成",
     "videoMp4Success": "视频已渲染",
     "videoServiceUnavailable": "未配置渲染服务 —— 已下载项目 ZIP 供本地渲染。",
     "videoResolution": "分辨率",
@@ -100,7 +97,10 @@
     "subtitlesCompiling": "正在生成字幕…",
     "subtitlesSuccess": "字幕已下载",
     "subtitlesEmpty": "没有可生成字幕的旁白",
-    "subtitlesFailed": "字幕下载失败"
+    "subtitlesFailed": "字幕下载失败",
+    "noSlides": "无可导出的幻灯片",
+    "noSlidesSkipped": "本课程无幻灯片，已跳过 PPTX",
+    "nothingToExport": "没有可导出的内容"
   },
   "import": {
     "classroom": "导入课堂",
@@ -135,6 +135,22 @@
       "emptyAgentResponses": "智能体连续无响应,讨论已停止。请重新尝试或检查模型配置。",
       "streamInterrupted": "数据流意外中断,讨论未能完成。请重新尝试。"
     },
+    "elementReference": {
+      "button": "引用课件",
+      "unavailable": "仅可引用当前 PPT 页面",
+      "instruction": "点击一个课件元素 · Esc 退出",
+      "fallback": "其他课件元素（{{count}}）",
+      "clear": "取消课件引用",
+      "summary": {
+        "noText": "无文字",
+        "emptyContent": "无内容",
+        "code": "代码",
+        "line": "线条",
+        "imageMetadata": "图片（仅引用元数据）",
+        "videoMetadata": "视频（仅引用元数据）",
+        "audioMetadata": "音频（仅引用元数据）"
+      }
+    },
     "tabs": {
       "lecture": "笔记",
       "chat": "对话"
@@ -151,22 +167,6 @@
       "qa": "Q&A",
       "discussion": "讨论",
       "lecture": "授课"
-    },
-    "elementReference": {
-      "button": "引用课件",
-      "unavailable": "仅可引用当前 PPT 页面",
-      "instruction": "点击一个课件元素 · Esc 退出",
-      "fallback": "其他课件元素（{{count}}）",
-      "clear": "取消课件引用",
-      "summary": {
-        "noText": "无文字",
-        "emptyContent": "无内容",
-        "code": "代码",
-        "line": "线条",
-        "imageMetadata": "图片（仅引用元数据）",
-        "videoMetadata": "视频（仅引用元数据）",
-        "audioMetadata": "音频（仅引用元数据）"
-      }
     }
   },
   "actions": {
@@ -247,14 +247,8 @@
       "interactive": "互动",
       "pbl": "PBL"
     },
-    "multiTab": {
-      "conflict": {
-        "title": "另一个标签页正在编辑此课程",
-        "body": "编辑模式同一时间只允许一个标签页持有，避免变更冲突。请先关闭其他标签页（或等待对方会话超时），再在此进入编辑模式。",
-        "actionDismiss": "知道了"
-      }
-    },
     "text": {
+      "toolbar": "文本工具栏",
       "label": "文本",
       "font": "字体",
       "fontDefault": "默认",
@@ -269,19 +263,31 @@
       "alignCenter": "居中对齐",
       "alignRight": "右对齐",
       "bullet": "项目符号",
-      "toolbar": "文本工具栏",
       "colorHex": "颜色值"
     },
+    "line": {
+      "toolbar": "线条工具栏",
+      "kind": "线条类型",
+      "color": "线条颜色",
+      "width": "线宽",
+      "style": "线条样式",
+      "start": "起点样式",
+      "end": "终点样式",
+      "straight": "直线",
+      "broken": "折线",
+      "broken2": "双折线",
+      "curve": "曲线",
+      "cubic": "三次曲线",
+      "solid": "实线",
+      "dashed": "虚线",
+      "dotted": "点线",
+      "none": "无",
+      "arrow": "箭头",
+      "dot": "圆点"
+    },
     "insert": {
-      "textBox": "文本框",
-      "dragToolbar": "拖动工具栏",
-      "dragToolbarKeyboard": "移动工具栏：按回车或空格开始，再使用方向键移动",
-      "image": "图片",
-      "imageDrop": "拖入图片或点击选择文件",
-      "imageOr": "或粘贴图片 URL",
-      "imageUrlPlaceholder": "https://…",
-      "imageInsert": "插入",
       "toolbar": "插入工具栏",
+      "textBox": "文本框",
       "line": "线条",
       "linePresets": {
         "straight": "直线",
@@ -301,8 +307,15 @@
       "chartLine": "折线图",
       "chartPie": "饼图",
       "tableDimensions": "{{rows}} x {{columns}} 表格",
+      "dragToolbar": "拖动工具栏",
+      "dragToolbarKeyboard": "移动工具栏：按回车或空格开始，再使用方向键移动",
       "collapseToolbar": "收起插入工具",
       "expandToolbar": "展开插入工具",
+      "image": "图片",
+      "imageDrop": "拖入图片或点击选择文件",
+      "imageOr": "或粘贴图片 URL",
+      "imageUrlPlaceholder": "https://…",
+      "imageInsert": "插入",
       "video": "视频",
       "videoDrop": "拖入视频或点击选择文件",
       "videoOr": "或粘贴视频 URL",
@@ -313,6 +326,37 @@
       "audioOr": "或粘贴音频 URL",
       "audioUrlPlaceholder": "https://…",
       "audioInsert": "插入"
+    },
+    "asset": {
+      "drop": "拖入文件或点击选择",
+      "orUrl": "或粘贴文件 URL",
+      "urlPlaceholder": "https://…",
+      "insert": "插入",
+      "invalidType": "文件类型不受支持",
+      "readFailed": "无法读取文件"
+    },
+    "latex": {
+      "toolbar": "公式工具栏",
+      "editFormula": "编辑公式",
+      "dialog": "公式编辑器",
+      "source": "LaTeX 源码",
+      "preview": "预览",
+      "symbols": "常用符号",
+      "presets": "预置公式",
+      "invalidSource": "LaTeX 源码无效。"
+    },
+    "video": {
+      "toolbar": "视频工具栏",
+      "poster": "设置封面"
+    },
+    "audio": {
+      "toolbar": "音频工具栏",
+      "preview": "试听音频",
+      "pause": "暂停试听",
+      "loop": "循环播放"
+    },
+    "table": {
+      "doubleClickToEdit": "双击编辑"
     },
     "nav": {
       "addSlide": "新增幻灯片",
@@ -338,17 +382,38 @@
       "toBack": "置于底层"
     },
     "image": {
+      "toolbar": "图片工具栏",
       "replace": "替换图片",
       "flipH": "水平翻转",
       "flipV": "垂直翻转",
-      "toolbar": "图片工具栏",
       "crop": "裁剪图片"
+    },
+    "contextMenu": {
+      "horizontalAlignment": "水平对齐",
+      "verticalAlignment": "垂直对齐",
+      "selectAll": "全选",
+      "copy": "复制",
+      "cut": "剪切",
+      "paste": "粘贴",
+      "unlock": "解锁",
+      "lock": "锁定",
+      "group": "组合",
+      "ungroup": "取消组合",
+      "bringForward": "上移一层",
+      "sendBackward": "下移一层",
+      "alignTop": "顶部对齐",
+      "alignMiddle": "垂直居中",
+      "alignBottom": "底部对齐"
     },
     "background": {
       "label": "背景",
       "solid": "纯色",
       "image": "图片",
       "color": "颜色"
+    },
+    "common": {
+      "cancel": "取消",
+      "confirm": "确定"
     },
     "quiz": {
       "addQuestion": "添加题目",
@@ -398,6 +463,7 @@
       "discussion": "讨论"
     },
     "element": {
+      "toolbar": "元素工具栏",
       "text": "文本",
       "image": "图片",
       "shape": "形状",
@@ -407,8 +473,7 @@
       "latex": "公式",
       "video": "视频",
       "audio": "音频",
-      "code": "代码",
-      "toolbar": "元素工具栏"
+      "code": "代码"
     },
     "agent": {
       "expand": "展开 AI 助手",
@@ -493,14 +558,14 @@
       "discussionDesc": "抛出问题，指定发起同学"
     },
     "tts": {
+      "cancelPreview": "取消试听",
       "preview": "试听",
       "regenerate": "重新生成配音",
       "statusReady": "已配音",
       "statusNone": "未配音",
       "statusGenerating": "生成中",
-      "statusError": "失败",
-      "cancelPreview": "取消试听",
-      "stopPreview": "停止试听"
+      "stopPreview": "停止试听",
+      "statusError": "失败"
     },
     "pick": {
       "pickFor": "为「{{label}}」选择元素",
@@ -553,78 +618,6 @@
       "notApplied": "未应用",
       "applyFailed": "编辑器无法应用元素修改，未更改任何内容。",
       "applyPartiallyFailed": "编辑器未能应用一项或多项元素修改，其他修改可能已应用。"
-    },
-    "line": {
-      "toolbar": "线条工具栏",
-      "kind": "线条类型",
-      "color": "线条颜色",
-      "width": "线宽",
-      "style": "线条样式",
-      "start": "起点样式",
-      "end": "终点样式",
-      "straight": "直线",
-      "broken": "折线",
-      "broken2": "双折线",
-      "curve": "曲线",
-      "cubic": "三次曲线",
-      "solid": "实线",
-      "dashed": "虚线",
-      "dotted": "点线",
-      "none": "无",
-      "arrow": "箭头",
-      "dot": "圆点"
-    },
-    "asset": {
-      "drop": "拖入文件或点击选择",
-      "orUrl": "或粘贴文件 URL",
-      "urlPlaceholder": "https://…",
-      "insert": "插入",
-      "invalidType": "文件类型不受支持",
-      "readFailed": "无法读取文件"
-    },
-    "latex": {
-      "toolbar": "公式工具栏",
-      "editFormula": "编辑公式",
-      "dialog": "公式编辑器",
-      "source": "LaTeX 源码",
-      "preview": "预览",
-      "symbols": "常用符号",
-      "presets": "预置公式",
-      "invalidSource": "LaTeX 源码无效。"
-    },
-    "video": {
-      "toolbar": "视频工具栏",
-      "poster": "设置封面"
-    },
-    "audio": {
-      "toolbar": "音频工具栏",
-      "preview": "试听音频",
-      "pause": "暂停试听",
-      "loop": "循环播放"
-    },
-    "table": {
-      "doubleClickToEdit": "双击编辑"
-    },
-    "contextMenu": {
-      "horizontalAlignment": "水平对齐",
-      "verticalAlignment": "垂直对齐",
-      "selectAll": "全选",
-      "copy": "复制",
-      "cut": "剪切",
-      "paste": "粘贴",
-      "unlock": "解锁",
-      "lock": "锁定",
-      "group": "组合",
-      "ungroup": "取消组合",
-      "bringForward": "上移一层",
-      "sendBackward": "下移一层",
-      "alignTop": "顶部对齐",
-      "alignMiddle": "垂直居中",
-      "alignBottom": "底部对齐"
-    },
-    "common": {
-      "cancel": "取消",
-      "confirm": "确定"
     },
     "roster": {
       "title": "课堂阵容",
@@ -740,67 +733,7 @@
     "startRecording": "开始录音"
   },
   "pbl": {
-    "legacyFormat": "此PBL场景使用旧格式，请重新生成课程",
     "emptyProject": "PBL项目尚未生成，请通过课程生成创建",
-    "roleSelection": {
-      "title": "选择你的角色",
-      "description": "选择一个角色开始项目协作"
-    },
-    "workspace": {
-      "restart": "重新开始",
-      "confirmRestart": "确定重置进度？",
-      "confirm": "确定",
-      "cancel": "取消"
-    },
-    "issueboard": {
-      "title": "任务看板",
-      "noIssues": "暂无任务",
-      "statusDone": "已完成",
-      "statusActive": "进行中",
-      "statusPending": "待处理"
-    },
-    "chat": {
-      "title": "项目讨论",
-      "currentIssue": "当前任务",
-      "mentionHint": "使用 @question 提问，@judge 提交评审",
-      "placeholder": "输入消息...",
-      "send": "发送",
-      "issueCompleteMessage": "任务「{{completed}}」已完成！进入下一个任务：「{{next}}」",
-      "allCompleteMessage": "🎉 所有任务都已完成！项目做得很棒！"
-    },
-    "guide": {
-      "howItWorks": "如何参与项目",
-      "help": "使用帮助",
-      "title": "使用帮助",
-      "step1": {
-        "title": "第一步：选择角色",
-        "desc": "项目生成后，从角色列表中选择一个角色（标记为🟢的非系统角色）"
-      },
-      "step2": {
-        "title": "第二步：完成任务",
-        "desc": "每个任务代表一个学习目标：",
-        "s1": {
-          "title": "查看当前任务",
-          "desc": "查看任务的标题、描述、负责人"
-        },
-        "s2": {
-          "title": "获取指导",
-          "example": "@question 我应该从哪里开始？\n@question 如何实现这个功能？",
-          "desc": "提问助手会提供引导性问题和提示（不直接给答案）"
-        },
-        "s3": {
-          "title": "提交作品",
-          "example": "@judge 我已经完成了，请检查",
-          "desc": "评审助手会评估你的工作并给出反馈：",
-          "complete": "自动进入下一个任务",
-          "revision": "根据反馈改进"
-        }
-      },
-      "step3": {
-        "title": "第三步：完成项目",
-        "desc": "所有任务完成后，系统会显示「🎉 项目已完成！」"
-      }
-    },
     "v2": {
       "hero": {
         "title": "项目实战 · Project-Based Learning",
@@ -1281,6 +1214,7 @@
       "azure": "Azure OpenAI",
       "anthropic": "Claude",
       "google": "Gemini",
+      "bedrock": "Amazon Bedrock",
       "deepseek": "DeepSeek",
       "qwen": "通义千问",
       "kimi": "Kimi",
@@ -1298,10 +1232,9 @@
       "bocha": "博查",
       "brave": "Brave Search",
       "baidu": "百度",
+      "claude": "Claude",
       "searxng": "SearXNG",
-      "openai-codex": "Codex",
-      "bedrock": "Amazon Bedrock",
-      "claude": "Claude"
+      "openai-codex": "Codex"
     },
     "providerTypes": {
       "openai": "OpenAI 协议",
@@ -1506,9 +1439,20 @@
     "voxcpmStopPreview": "停止试听",
     "voxcpmPreviewVoice": "试听音色",
     "voxcpmDeleteVoice": "删除音色",
+    "qwenCloneVoicesTitle": "Qwen TTS 克隆音色",
+    "qwenCloneRefText": "请输入与参考音频完全一致的逐字文本",
+    "qwenCloneRefAudioHint": "请使用 1–60 秒的干净人声，推荐 10–20 秒；音频会转换为 24 kHz 单声道 PCM WAV。",
+    "qwenCloneSaved": "Qwen 克隆音色已注册并保存",
+    "qwenCloneSaveFailed": "Qwen 克隆音色注册失败",
+    "qwenCloneUnsupported": "当前浏览器不支持录音，请改为上传音频文件。",
+    "qwenCloneSpeedHint": "克隆音色始终以 1× 语速合成。",
+    "qwenCloneDeleteWarning": "音色已从本地移除，但服务商端删除失败。",
+    "qwenCloneNarrationUnavailable": "指定音色不可用，旁白将改用其他可用音色。",
+    "qwenCloneDiscussionUnavailable": "指定音色不可用，讨论将改用其他可用音色。",
     "providerOpenAIWhisper": "OpenAI ASR (gpt-4o-mini-transcribe)",
     "providerBrowserNative": "浏览器原生 ASR",
     "providerQwenASR": "Qwen ASR（阿里云百炼）",
+    "providerFunASRASR": "FunASR（本地）",
     "providerLemonadeASR": "Lemonade ASR（本地）",
     "providerAzureASR": "Azure STT",
     "providerUnpdf": "unpdf（内置）",
@@ -1771,14 +1715,6 @@
     "testImageConnectivity": "测试连接",
     "imageConnectivitySuccess": "图像服务连接成功",
     "imageConnectivityFailed": "图像服务连接失败",
-    "providerCodexImage": "Codex",
-    "codexImageLoginRequired": "请先在“LLM 提供方 → Codex”中登录，才能生成图片。",
-    "codexImageConnected": "Codex 已连接",
-    "codexImageManageLogin": "前往 Codex 登录",
-    "codexImageFixedModel": "固定模型",
-    "codexImageTestHint": "仅检查 Codex 登录状态，不会生成图片或消耗图片额度。",
-    "codexImagePlanLimits": "使用 Codex 登录与 ChatGPT 方案额度；图片通常比文本消耗更多额度。",
-    "codexImageLoginValid": "Codex 登录有效，可用于图片生成",
     "imageTestSuccess": "图像生成测试成功",
     "imageTestFailed": "图像生成测试失败",
     "imageTestPromptPlaceholder": "输入图像描述进行测试",
@@ -1835,11 +1771,16 @@
     "clearCacheButton": "永久删除所有数据",
     "clearCacheSuccess": "缓存已清空，页面即将刷新",
     "clearCacheFailed": "清空缓存失败，请重试",
+    "clearCacheBlockedByOtherTabs": "请关闭其他打开此应用的标签页，然后重试。",
+    "persistUnavailable": "更改未被保存：应用无法访问已存储的数据。如果刷新后仍未恢复，请在设置中清除本地缓存。",
+    "persistChangesLost": "存储已恢复，但在其不可用期间所做的更改未能保存，已被上次保存的版本覆盖。",
     "webSearchSettings": "网络搜索",
     "webSearchApiKey": "搜索 API Key",
     "webSearchApiKeyPlaceholder": "输入你的搜索 API Key",
     "webSearchApiKeyPlaceholderServer": "已配置服务端密钥，可选填覆盖",
     "webSearchApiKeyHint": "从所选搜索服务商获取 API Key，用于网络搜索",
+    "claudeSearchModel": "搜索模型",
+    "claudeSearchModelHint": "用于执行网络搜索并总结结果的 Claude 模型。",
     "webSearchApiKeyOptional": "API Key 为可选项。未填写时将通过公开页面抓取获取结果。",
     "searxngServerOnlyNotice": "SearXNG 须由服务端配置。请设置 SEARXNG_BASE_URL 环境变量（或在 server-providers.yml 的 web-search 段中配置）。不接受客户端自行填写实例地址。",
     "baiduSubSources": "百度搜索源",
@@ -1904,9 +1845,44 @@
       "capabilities": "套餐提供的能力",
       "offeredNote": "套餐提供的模型清单。请在生成界面选择需要使用的模型——是否可用取决于你的套餐档位，不支持的模型会在生成时报错。"
     },
+    "skills": {
+      "nav": "技能",
+      "title": "Skill 设置",
+      "description": "查看当前账号已安装的技能，查看详情，或下载为 zip 以便分享和备份。",
+      "mySkills": "我的技能",
+      "builtinSkills": "内置技能",
+      "emptyMySkills": "还没有自己的技能——在对话里让 agent 从历史创建一个。",
+      "emptyBuiltinSkills": "暂无内置技能。",
+      "listFailed": "技能列表加载失败",
+      "retry": "重试",
+      "badgeBuiltin": "内置",
+      "badgeOwner": "我的技能",
+      "badgeConstraints": "含约束",
+      "details": "详情",
+      "download": "下载",
+      "detailFailed": "技能详情加载失败",
+      "contentLabel": "正文",
+      "builtinDetailNote": "该技能随 OpenMAIC 提供。下载后可导入其他智能体工作台。",
+      "upload": "上传",
+      "uploading": "正在上传…",
+      "uploadFailed": "技能上传失败。请检查文件后重试。",
+      "delete": "删除",
+      "deleting": "正在删除…",
+      "deleteTitle": "删除技能？",
+      "deleteConfirm": "这会从你的账号中移除该技能，且无法撤销。",
+      "deleteFailed": "技能删除失败，请重试。"
+    },
     "ttsBrowserNativeTimelineNotice": "浏览器内置 TTS 不支持编辑器时间轴的音频功能（试听、重新生成、全部配音）。切换到托管 TTS 提供方即可逐句生成和管理音频。",
     "alidocmindAccessKeyId": "AccessKey ID",
     "alidocmindAccessKeySecret": "AccessKey Secret",
+    "providerCodexImage": "Codex",
+    "codexImageLoginRequired": "请先在“LLM 提供方 → Codex”中登录，才能生成图片。",
+    "codexImageConnected": "Codex 已连接",
+    "codexImageManageLogin": "前往 Codex 登录",
+    "codexImageFixedModel": "固定模型",
+    "codexImageTestHint": "仅检查 Codex 登录状态，不会生成图片或消耗图片额度。",
+    "codexImagePlanLimits": "使用 Codex 登录与 ChatGPT 方案额度；图片通常比文本消耗更多额度。",
+    "codexImageLoginValid": "Codex 登录有效，可用于图片生成",
     "codexOAuth": {
       "experimental": "实验性第三方 Codex 接入；使用你的 ChatGPT 方案额度。",
       "unavailableTitle": "Codex 登录当前不可用",
@@ -1939,81 +1915,7 @@
       "loginFailed": "登录失败，请重新选择任一登录方式重试。",
       "loginExpired": "本次登录已过期，请重新开始。"
     },
-    "connected": "已连接",
-    "qwenCloneVoicesTitle": "Qwen TTS 克隆音色",
-    "qwenCloneRefText": "请输入与参考音频完全一致的逐字文本",
-    "qwenCloneRefAudioHint": "请使用 1–60 秒的干净人声，推荐 10–20 秒；音频会转换为 24 kHz 单声道 PCM WAV。",
-    "qwenCloneSaved": "Qwen 克隆音色已注册并保存",
-    "qwenCloneSaveFailed": "Qwen 克隆音色注册失败",
-    "qwenCloneUnsupported": "当前浏览器不支持录音，请改为上传音频文件。",
-    "qwenCloneSpeedHint": "克隆音色始终以 1× 语速合成。",
-    "qwenCloneDeleteWarning": "音色已从本地移除，但服务商端删除失败。",
-    "qwenCloneNarrationUnavailable": "指定音色不可用，旁白将改用其他可用音色。",
-    "qwenCloneDiscussionUnavailable": "指定音色不可用，讨论将改用其他可用音色。",
-    "providerFunASRASR": "FunASR（本地）",
-    "clearCacheBlockedByOtherTabs": "请关闭其他打开此应用的标签页，然后重试。",
-    "persistUnavailable": "更改未被保存：应用无法访问已存储的数据。如果刷新后仍未恢复，请在设置中清除本地缓存。",
-    "persistChangesLost": "存储已恢复，但在其不可用期间所做的更改未能保存，已被上次保存的版本覆盖。",
-    "claudeSearchModel": "搜索模型",
-    "claudeSearchModelHint": "用于执行网络搜索并总结结果的 Claude 模型。",
-    "skills": {
-      "nav": "技能",
-      "title": "Skill 设置",
-      "description": "查看当前账号已安装的技能，查看详情，或下载为 zip 以便分享和备份。",
-      "mySkills": "我的技能",
-      "builtinSkills": "内置技能",
-      "emptyMySkills": "还没有自己的技能——在对话里让 agent 从历史创建一个。",
-      "emptyBuiltinSkills": "暂无内置技能。",
-      "listFailed": "技能列表加载失败",
-      "retry": "重试",
-      "badgeBuiltin": "内置",
-      "badgeOwner": "我的技能",
-      "badgeConstraints": "含约束",
-      "details": "详情",
-      "download": "下载",
-      "detailFailed": "技能详情加载失败",
-      "contentLabel": "正文",
-      "builtinDetailNote": "该技能随 OpenMAIC 提供。下载后可导入其他智能体工作台。",
-      "upload": "上传",
-      "uploading": "正在上传…",
-      "uploadFailed": "技能上传失败。请检查文件后重试。",
-      "delete": "删除",
-      "deleting": "正在删除…",
-      "deleteTitle": "删除技能？",
-      "deleteConfirm": "这会从你的账号中移除该技能，且无法撤销。",
-      "deleteFailed": "技能删除失败，请重试。"
-    }
-  },
-  "profile": {
-    "title": "个人资料",
-    "defaultNickname": "同学",
-    "chooseAvatar": "选择头像",
-    "uploadAvatar": "上传",
-    "bioPlaceholder": "介绍一下自己，AI老师会根据你的背景个性化教学...",
-    "avatarHint": "你的头像将显示在课堂讨论和对话中",
-    "fileTooLarge": "图片过大，请选择小于 5MB 的图片",
-    "invalidFileType": "请选择图片文件",
-    "editTooltip": "点击编辑个人资料"
-  },
-  "media": {
-    "imageCapability": "图像生成",
-    "imageHint": "课件中生成配图",
-    "videoCapability": "视频生成",
-    "videoHint": "课件中生成视频",
-    "ttsCapability": "语音合成",
-    "ttsHint": "AI 老师语音讲解",
-    "asrCapability": "语音识别",
-    "asrHint": "语音输入参与讨论",
-    "provider": "服务商",
-    "model": "模型",
-    "voice": "音色",
-    "speed": "语速",
-    "language": "语言"
-  },
-  "accessCode": {
-    "title": "请输入访问码",
-    "placeholder": "访问码",
-    "error": "访问码错误，请重试。"
+    "connected": "已连接"
   },
   "workspace": {
     "untitledCourse": "未命名课堂",
@@ -2110,6 +2012,37 @@
     "courseTabClose": "关闭标签页《{{name}}》",
     "courseTabRunning": "生成中",
     "foldersUnavailable": "此版本不支持文件夹"
+  },
+  "profile": {
+    "title": "个人资料",
+    "defaultNickname": "同学",
+    "chooseAvatar": "选择头像",
+    "uploadAvatar": "上传",
+    "bioPlaceholder": "介绍一下自己，AI老师会根据你的背景个性化教学...",
+    "avatarHint": "你的头像将显示在课堂讨论和对话中",
+    "fileTooLarge": "图片过大，请选择小于 5MB 的图片",
+    "invalidFileType": "请选择图片文件",
+    "editTooltip": "点击编辑个人资料"
+  },
+  "media": {
+    "imageCapability": "图像生成",
+    "imageHint": "课件中生成配图",
+    "videoCapability": "视频生成",
+    "videoHint": "课件中生成视频",
+    "ttsCapability": "语音合成",
+    "ttsHint": "AI 老师语音讲解",
+    "asrCapability": "语音识别",
+    "asrHint": "语音输入参与讨论",
+    "provider": "服务商",
+    "model": "模型",
+    "voice": "音色",
+    "speed": "语速",
+    "language": "语言"
+  },
+  "accessCode": {
+    "title": "请输入访问码",
+    "placeholder": "访问码",
+    "error": "访问码错误，请重试。"
   },
   "proMode": {
     "attach": "添加材料",

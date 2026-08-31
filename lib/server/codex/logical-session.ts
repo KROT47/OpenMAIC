@@ -1,13 +1,15 @@
 import { createHash, randomUUID } from 'node:crypto';
+import {
+  MODEL_LOGICAL_SESSION_KINDS,
+  type ModelLogicalSession,
+  type ModelLogicalSessionKind,
+} from '@/lib/server/model-logical-session';
 
-export const CODEX_LOGICAL_SESSION_KINDS = ['chat', 'agent-edit'] as const;
+export const CODEX_LOGICAL_SESSION_KINDS = MODEL_LOGICAL_SESSION_KINDS;
 
-export type CodexLogicalSessionKind = (typeof CODEX_LOGICAL_SESSION_KINDS)[number];
+export type CodexLogicalSessionKind = ModelLogicalSessionKind;
 
-export interface CodexLogicalSession {
-  kind: CodexLogicalSessionKind;
-  id: string;
-}
+export type CodexLogicalSession = ModelLogicalSession;
 
 export type CodexUpstreamSessionId = `oma_${string}`;
 
