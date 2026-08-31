@@ -73,7 +73,7 @@ The compatibility port added or manually adapted these boundaries:
 - `app/api/verify-image-provider/route.ts`
 - `lib/server/providers/server-config-policy.ts`
 - `lib/server/provider-config.ts`
-- the eight Codex-enabled locale files under `lib/i18n/locales/`
+- all twelve current locale files under `lib/i18n/locales/`
 - focused model, image-route, settings-persistence, media, Workbench, and Codex Settings browser
   tests
 
