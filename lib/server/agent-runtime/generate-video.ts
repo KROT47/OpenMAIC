@@ -22,7 +22,7 @@ import {
 } from '@/lib/server/provider-config';
 import { createLogger } from '@/lib/logger';
 import { recordGenerationUsage } from '@/lib/server/usage-storage';
-import { validateUrlForSSRF } from '@/lib/server/ssrf-guard';
+import { createStrictFetchTransport } from '@/lib/server/strict-fetch';
 import { readResponseBodyWithLimit } from '@/lib/server/bounded-download';
 import { CLASSROOMS_DIR } from '@/lib/server/classroom-storage';
 import type { CourseToolDeps } from './course-tools';
@@ -124,25 +124,6 @@ async function awaitWithSignal<T>(promise: Promise<T>, signal: AbortSignal): Pro
   });
 }
 
-async function fetchGeneratedVideo(url: string, signal: AbortSignal): Promise<Response> {
-  const maxRedirects = 5;
-  let currentUrl = url;
-  for (let hop = 0; ; hop++) {
-    throwIfAborted(signal);
-    const ssrfError = await validateUrlForSSRF(currentUrl);
-    throwIfAborted(signal);
-    if (ssrfError) throw new Error(ssrfError);
-
-    const response = await fetch(currentUrl, { redirect: 'manual', signal });
-    if (response.status < 300 || response.status >= 400) return response;
-
-    const location = response.headers.get('location');
-    if (!location) throw new Error('Video download redirect has no Location header');
-    if (hop >= maxRedirects) throw new Error('Video download exceeded 5 redirects');
-    currentUrl = new URL(location, currentUrl).href;
-  }
-}
-
 /**
  * Video providers return hosted URLs that may expire. Materialize those bytes
  * through the same local classroom-media path as generate_image and classic
@@ -167,15 +148,25 @@ export async function defaultPersistGeneratedVideo({
     throw new Error(`Video provider returned an unsupported URL protocol: ${parsed.protocol}`);
   }
 
-  const response = await fetchGeneratedVideo(result.url, signal);
-  if (!response.ok) throw new Error(`Generated video download failed: HTTP ${response.status}`);
-  const mime = response.headers.get('content-type')?.split(';')[0]?.trim() || 'video/mp4';
-  if (!mime.startsWith('video/')) {
-    throw new Error(`Generated video download returned unexpected content type: ${mime}`);
+  const transport = createStrictFetchTransport({
+    allowLocalNetworks:
+      process.env.ALLOW_LOCAL_NETWORKS === 'true' || process.env.ALLOW_LOCAL_NETWORKS === '1',
+  });
+  let mime: string;
+  let bytes: Buffer;
+  try {
+    const response = await transport.fetch(result.url, { signal });
+    if (!response.ok) throw new Error(`Generated video download failed: HTTP ${response.status}`);
+    mime = response.headers.get('content-type')?.split(';')[0]?.trim() || 'video/mp4';
+    if (!mime.startsWith('video/')) {
+      throw new Error(`Generated video download returned unexpected content type: ${mime}`);
+    }
+    bytes = await readResponseBodyWithLimit(response, { maxBytes: MAX_GENERATED_VIDEO_BYTES });
+    throwIfAborted(signal);
+  } finally {
+    await transport.close().catch(() => undefined);
   }
-  const bytes = await readResponseBodyWithLimit(response, { maxBytes: MAX_GENERATED_VIDEO_BYTES });
   const hash = createHash('sha256').update(bytes).digest('hex');
-  throwIfAborted(signal);
 
   const mediaDir = path.join(CLASSROOMS_DIR, stageId, 'media');
   const filename = `generated-${hash}.${extensionForVideoMime(mime)}`;

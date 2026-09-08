@@ -35,6 +35,7 @@ import { createLogger } from '@/lib/logger';
 import { apiError, apiSuccess } from '@/lib/server/api-response';
 import { validateUrlForSSRF } from '@/lib/server/ssrf-guard';
 import { getServerImageRouteAdapter } from '@/lib/server/providers/image-route-adapters';
+import { createStrictFetchTransport } from '@/lib/server/strict-fetch';
 
 const log = createLogger('ImageGeneration API');
 
@@ -73,6 +74,15 @@ export async function POST(request: NextRequest) {
     const managed = isServerConfiguredProvider('image', providerId);
     const clientApiKey = managed ? undefined : request.headers.get('x-api-key') || undefined;
     const clientBaseUrl = managed ? undefined : request.headers.get('x-base-url') || undefined;
+    const provider = IMAGE_PROVIDERS[providerId];
+
+    if (!managed && !clientBaseUrl && provider?.trustedDefaultBaseUrlOnly) {
+      return apiError(
+        'INVALID_URL',
+        403,
+        'This provider endpoint must be configured by the server operator',
+      );
+    }
 
     if (clientBaseUrl && process.env.NODE_ENV === 'production') {
       const ssrfError = await validateUrlForSSRF(clientBaseUrl);
@@ -82,7 +92,6 @@ export async function POST(request: NextRequest) {
     }
 
     const apiKey = resolveImageApiKey(providerId, clientApiKey);
-    const provider = IMAGE_PROVIDERS[providerId];
     if (provider?.requiresApiKey && !apiKey) {
       return apiError(
         'MISSING_API_KEY',
@@ -120,7 +129,16 @@ export async function POST(request: NextRequest) {
         `prompt="${body.prompt.slice(0, 80)}...", size=${body.width ?? 'auto'}x${body.height ?? 'auto'}`,
     );
 
-    const result = await generateImage({ providerId, apiKey, baseUrl, model }, body);
+    const transport = clientBaseUrl ? createStrictFetchTransport() : undefined;
+    let result;
+    try {
+      result = await generateImage(
+        { providerId, apiKey, baseUrl, model, fetchImpl: transport?.fetch },
+        body,
+      );
+    } finally {
+      await transport?.close().catch(() => undefined);
+    }
 
     void recordGenerationUsage({
       kind: 'image',

@@ -20,6 +20,7 @@ import {
   parseUserSkillZip,
   UserSkillUploadError,
 } from '@/lib/server/skill-export';
+import { parseCappedFormData, UploadTooLargeError } from '@/lib/server/capped-stream';
 
 export const runtime = 'nodejs';
 
@@ -48,7 +49,7 @@ export async function POST(req: NextRequest) {
   if (!isAgentRuntimeConfigured()) return new Response('Not found', { status: 404 });
   return withRequestOwnerId(req, async (ownerId, responseHeaders) => {
     try {
-      const form = await req.formData();
+      const form = await parseCappedFormData(req, 2 * 1024 * 1024);
       const upload = form.get('file');
       if (!upload || typeof upload === 'string' || typeof upload.arrayBuffer !== 'function') {
         return new Response('A skill file is required.', {
@@ -82,6 +83,12 @@ export async function POST(req: NextRequest) {
         { status: 201, headers: responseHeaders },
       );
     } catch (error) {
+      if (error instanceof UploadTooLargeError) {
+        return new Response('The skill upload is too large.', {
+          status: 413,
+          headers: responseHeaders,
+        });
+      }
       if (error instanceof UserSkillError) {
         const status = error.code === 'duplicate' || error.code === 'quota' ? 409 : 400;
         return NextResponse.json(

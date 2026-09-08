@@ -129,7 +129,7 @@ Lemonade is a local service and does not require a key:
 IMAGE_LEMONADE_BASE_URL=http://localhost:13305/v1
 ```
 
-ComfyUI Image does not require an API key and connects to `http://localhost:8188` by default. Enter the ComfyUI Base URL in Settings, and place workflow JSON exported in API format in OpenMAIC's `public/` directory. Use filenames matching `comfyui-*.json` or containing `workflow`; the Settings page discovers these files automatically and offers them as workflows. With Docker, add the workflow before building the image or mount an individual workflow file into `/app/public/` in the container. Because `comfyui-image` is not a server-managed provider, production deployments connecting to host-side ComfyUI must also set `ALLOW_LOCAL_NETWORKS=true`.
+ComfyUI Image does not require an API key. Private endpoints must be configured by the server operator with `IMAGE_COMFYUI_BASE_URL=http://localhost:8188`; client-supplied private endpoints are rejected. Place workflow JSON exported in API format in OpenMAIC's `public/` directory. With Docker, add the workflow before building the image or mount it into `/app/public/`. Set `ALLOW_LOCAL_NETWORKS=true` only when an operator-configured autonomous media provider returns generated asset URLs on a private network.
 
 ## Video generation providers
 
@@ -190,10 +190,12 @@ Brave and SearXNG do not require an API key. The frontend lets users choose whet
 For shared deployments such as internal demos or classrooms, set an access code so visitors must enter a password before they can see the app:
 
 ```bash
-ACCESS_CODE=your-secret-code
+node -e "console.log('ACCESS_CODE=omc_'+require('node:crypto').randomBytes(32).toString('base64url'))"
+DATABASE_URL=postgres://...
+ACCESS_CODE_TRUSTED_IP_HEADER=x-real-ip
 ```
 
-Visitors are prompted only once; the password is stored in an HTTP-only cookie. Leave it empty to disable access control.
+Copy the generated `ACCESS_CODE`. Set the IP header to one overwritten by your trusted reverse proxy; PostgreSQL shares attempt limits across instances. The database role must be able to create the limiter table on first startup. Legacy human-selected codes are rejected. Leave `ACCESS_CODE` empty to disable access control.
 
 ## Default model and model routing
 
@@ -239,7 +241,7 @@ The following server options can also be configured with environment variables:
 # Parallel scene-content generation; 0 or unset means sequential
 PARALLEL_SCENE_CONCURRENCY=3
 
-# Allow localhost and private-network addresses; self-hosted/private deployments only
+# Allow autonomous server providers to return private-network media URLs
 ALLOW_LOCAL_NETWORKS=true
 
 # Optional MP4 rendering service

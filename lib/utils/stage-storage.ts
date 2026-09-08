@@ -1136,7 +1136,7 @@ function folderRouteError(body: FolderRouteBody | null | undefined): Error {
   return new Error(message ?? 'folder request failed');
 }
 
-/** The owner-scoped routes return the reference's `FolderItem` (row + userKey). */
+/** Normalize the owner-scoped route's public folder row. */
 function toFolderRecord(folder: FolderRecord): FolderRecord {
   return {
     id: folder.id,

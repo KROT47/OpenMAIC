@@ -53,13 +53,14 @@ export async function testNanoBananaConnectivity(
   config: ImageGenerationConfig,
 ): Promise<{ success: boolean; message: string }> {
   const baseUrl = config.baseUrl || DEFAULT_BASE_URL;
+  const fetchImpl = config.fetchImpl ?? fetch;
   const model = config.model || DEFAULT_MODEL;
   const url = `${baseUrl}/v1beta/models`;
 
   // Try ?key= query param first (direct Google API), fall back to x-goog-api-key header (proxy)
   let response: Response | null = null;
   try {
-    response = await fetch(`${url}?key=${config.apiKey}`, {
+    response = await fetchImpl(`${url}?key=${config.apiKey}`, {
       method: 'GET',
       redirect: 'manual',
     });
@@ -68,7 +69,7 @@ export async function testNanoBananaConnectivity(
   }
   if (!response || !response.ok) {
     try {
-      response = await fetch(url, {
+      response = await fetchImpl(url, {
         method: 'GET',
         redirect: 'manual',
         headers: { 'x-goog-api-key': config.apiKey },
@@ -104,9 +105,10 @@ export async function generateWithNanoBanana(
   options: ImageGenerationOptions,
 ): Promise<ImageGenerationResult> {
   const baseUrl = config.baseUrl || DEFAULT_BASE_URL;
+  const fetchImpl = config.fetchImpl ?? fetch;
   const model = requireModel(config.model, 'Nano Banana');
 
-  const response = await fetch(`${baseUrl}/v1beta/models/${model}:generateContent`, {
+  const response = await fetchImpl(`${baseUrl}/v1beta/models/${model}:generateContent`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

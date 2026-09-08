@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   recordGenerationUsage: vi.fn().mockResolvedValue(undefined),
   mkdir: vi.fn().mockResolvedValue(undefined),
   writeFile: vi.fn().mockResolvedValue(undefined),
+  closeTransport: vi.fn().mockResolvedValue(undefined),
   log: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));
 
@@ -14,7 +15,12 @@ vi.mock('@/lib/server/usage-storage', () => ({
   recordGenerationUsage: mocks.recordGenerationUsage,
 }));
 vi.mock('node:fs', () => ({ promises: { mkdir: mocks.mkdir, writeFile: mocks.writeFile } }));
-vi.mock('@/lib/server/ssrf-guard', () => ({ validateUrlForSSRF: async () => null }));
+vi.mock('@/lib/server/strict-fetch', () => ({
+  createStrictFetchTransport: () => ({
+    fetch: (...args: Parameters<typeof fetch>) => fetch(...args),
+    close: mocks.closeTransport,
+  }),
+}));
 vi.mock('@/lib/logger', () => ({ createLogger: () => mocks.log }));
 
 import {

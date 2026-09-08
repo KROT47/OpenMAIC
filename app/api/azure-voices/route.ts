@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { createLogger } from '@/lib/logger';
 import { validateUrlForSSRF } from '@/lib/server/ssrf-guard';
 import { apiError, apiSuccess } from '@/lib/server/api-response';
+import { createStrictFetchTransport } from '@/lib/server/strict-fetch';
 const log = createLogger('Azure Voices');
 
 export const maxDuration = 30;
@@ -31,32 +32,30 @@ export async function POST(req: NextRequest) {
       return apiError('INVALID_URL', 403, ssrfError);
     }
 
-    // Call Azure voices list endpoint; disable redirect following to prevent SSRF via redirect
-    const response = await fetch(`${baseUrl}/cognitiveservices/voices/list`, {
-      method: 'GET',
-      headers: {
-        'Ocp-Apim-Subscription-Key': apiKey,
-      },
-      redirect: 'manual',
-    });
+    const transport = createStrictFetchTransport();
+    try {
+      const response = await transport.fetch(`${baseUrl}/cognitiveservices/voices/list`, {
+        method: 'GET',
+        headers: {
+          'Ocp-Apim-Subscription-Key': apiKey,
+        },
+      });
 
-    if (response.status >= 300 && response.status < 400) {
-      return apiError('REDIRECT_NOT_ALLOWED', 403, 'Redirects are not allowed');
+      if (!response.ok) {
+        const errorText = await response.text();
+        return apiError(
+          'UPSTREAM_ERROR',
+          response.status,
+          'Failed to fetch voices from Azure',
+          errorText || response.statusText,
+        );
+      }
+
+      const voices = await response.json();
+      return apiSuccess({ voices });
+    } finally {
+      await transport.close().catch(() => undefined);
     }
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      return apiError(
-        'UPSTREAM_ERROR',
-        response.status,
-        'Failed to fetch voices from Azure',
-        errorText || response.statusText,
-      );
-    }
-
-    const voices = await response.json();
-
-    return apiSuccess({ voices });
   } catch (error) {
     log.error(`Azure voices fetch failed [baseUrl="${baseUrl ?? 'unknown'}"]:`, error);
     return apiError(

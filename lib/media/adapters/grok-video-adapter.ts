@@ -85,10 +85,11 @@ export async function testGrokVideoConnectivity(
   config: VideoGenerationConfig,
 ): Promise<{ success: boolean; message: string }> {
   const baseUrl = config.baseUrl || DEFAULT_BASE_URL;
+  const fetchImpl = config.fetchImpl ?? fetch;
   return probeAuth({
     providerName: 'Grok Video',
     request: () =>
-      fetch(`${baseUrl}/videos/generations`, {
+      fetchImpl(`${baseUrl}/videos/generations`, {
         method: 'POST',
         redirect: 'manual',
         headers: apiHeaders(config.apiKey),
@@ -109,6 +110,7 @@ async function submitVideoGeneration(
   apiKey: string,
   model: string,
   options: VideoGenerationOptions,
+  fetchImpl: NonNullable<VideoGenerationConfig['fetchImpl']>,
 ): Promise<string> {
   const body: Record<string, unknown> = {
     model,
@@ -117,7 +119,7 @@ async function submitVideoGeneration(
 
   if (options.duration) body.duration = options.duration;
 
-  const response = await fetch(`${baseUrl}/videos/generations`, {
+  const response = await fetchImpl(`${baseUrl}/videos/generations`, {
     method: 'POST',
     headers: apiHeaders(apiKey),
     body: JSON.stringify(body),
@@ -144,8 +146,9 @@ async function pollVideoStatus(
   baseUrl: string,
   apiKey: string,
   requestId: string,
+  fetchImpl: NonNullable<VideoGenerationConfig['fetchImpl']>,
 ): Promise<GrokVideoPollResponse> {
-  const response = await fetch(`${baseUrl}/videos/${requestId}`, {
+  const response = await fetchImpl(`${baseUrl}/videos/${requestId}`, {
     method: 'GET',
     headers: apiHeaders(apiKey),
   });
@@ -168,14 +171,15 @@ export async function generateWithGrokVideo(
 ): Promise<VideoGenerationResult> {
   const model = requireModel(config.model, 'Grok Video');
   const baseUrl = config.baseUrl || DEFAULT_BASE_URL;
+  const fetchImpl = config.fetchImpl ?? fetch;
 
   return runPolledTask<VideoGenerationResult>({
     submit: async () => ({
       status: 'submitted',
-      taskId: await submitVideoGeneration(baseUrl, config.apiKey, model, options),
+      taskId: await submitVideoGeneration(baseUrl, config.apiKey, model, options, fetchImpl),
     }),
     poll: async (requestId) => {
-      const result = await pollVideoStatus(baseUrl, config.apiKey, requestId);
+      const result = await pollVideoStatus(baseUrl, config.apiKey, requestId, fetchImpl);
 
       if (result.status === 'done') {
         if (!result.video?.url) {

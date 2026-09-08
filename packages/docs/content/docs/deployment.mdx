@@ -52,7 +52,7 @@ services:
       - ./server-providers.yml:/app/server-providers.yml:ro
 ```
 
-Inside a Docker container, `localhost` refers to the container itself. If Ollama, Lemonade, VoxCPM, or ComfyUI runs on the host, use `host.docker.internal`, for example `http://host.docker.internal:11434/v1` or `http://host.docker.internal:8188`. Linux Docker usually also requires `extra_hosts: ["host.docker.internal:host-gateway"]` on the `openmaic` service. Because ComfyUI is not currently a server-managed provider, production deployments must also set `ALLOW_LOCAL_NETWORKS=true`, or the SSRF guard will reject the address.
+Inside a Docker container, `localhost` refers to the container itself. If Ollama, Lemonade, VoxCPM, or ComfyUI runs on the host, use `host.docker.internal`, for example `http://host.docker.internal:11434/v1` or `http://host.docker.internal:8188`. Linux Docker usually also requires `extra_hosts: ["host.docker.internal:host-gateway"]` on the `openmaic` service. Configure private provider endpoints server-side, for example with `IMAGE_COMFYUI_BASE_URL`; client-supplied private endpoints are rejected. Set `ALLOW_LOCAL_NETWORKS=true` only if an operator-configured autonomous media provider returns generated asset URLs on the private network.
 
 ## Self-host on a VM
 

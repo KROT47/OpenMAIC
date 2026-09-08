@@ -129,7 +129,7 @@ Lemonade خدمة محلية ولا تحتاج إلى مفتاح API:
 IMAGE_LEMONADE_BASE_URL=http://localhost:13305/v1
 ```
 
-ComfyUI Image لا يحتاج إلى مفتاح API، ويتصل افتراضيًا بـ `http://localhost:8188`. أدخل عنوان URL الأساسي لـ ComfyUI في الإعدادات، وضع ملفات workflow بصيغة JSON المصدرة من ComfyUI API في مجلد `public/` الخاص بـ OpenMAIC؛ يجب أن يكون اسم الملف مطابقًا لـ `comfyui-*.json` أو يحتوي على `workflow`. ستكتشف صفحة الإعدادات هذه الملفات تلقائيًا وتعرضها كخيارات workflow. عند نشر Docker، يجب تضمين ملفات workflow أثناء بناء الصورة أو ربط ملف workflow واحد بمجلد `/app/public/` داخل الحاوية. لأن `comfyui-image` ليس موفرًا مستضافًا على الخادم، عند تشغيل ComfyUI على المضيف مع Docker في الإنتاج، يجب تعيين `ALLOW_LOCAL_NETWORKS=true` للسماح بالوصول المحلي، وإلا سيرفض حارس SSRF العنوان المحلي المرسل من العميل.
+لا يحتاج ComfyUI Image إلى مفتاح API. يجب أن يضبط مسؤول الخادم نقاط النهاية الخاصة عبر `IMAGE_COMFYUI_BASE_URL=http://localhost:8188`؛ وتُرفض نقاط النهاية الخاصة المرسلة من العميل. ضع ملفات workflow بصيغة JSON المصدرة من API في مجلد `public/` الخاص بـ OpenMAIC، بأسماء تطابق `comfyui-*.json` أو تحتوي على `workflow`. مع Docker، أضف workflow قبل بناء الصورة أو اربطه في `/app/public/`. عيّن `ALLOW_LOCAL_NETWORKS=true` فقط إذا كان موفر وسائط مستقل أعدّه المسؤول يعيد عناوين ملفات مولدة داخل شبكة خاصة.
 
 ## موفرو توليد الفيديو
 
@@ -190,10 +190,12 @@ Brave وSearXNG لا يحتاجان إلى مفتاح API؛ يمكن للواج�
 للنشر المشترك (عروض داخلية، صفوف)، يمكن تعيين رمز وصول ليطلب من الزوار إدخال كلمة مرور قبل رؤية التطبيق:
 
 ```bash
-ACCESS_CODE=your-secret-code
+node -e "console.log('ACCESS_CODE=omc_'+require('node:crypto').randomBytes(32).toString('base64url'))"
+DATABASE_URL=postgres://...
+ACCESS_CODE_TRUSTED_IP_HEADER=x-real-ip
 ```
 
-يُطلب من الزائر إدخاله مرة واحدة فقط، ويحفظ في cookie من نوع HTTP-only. اتركه فارغًا لتعطيله.
+انسخ `ACCESS_CODE` المُنشأ، واضبط ترويسة IP على ترويسة يستبدلها الوكيل العكسي الموثوق. تشارك PostgreSQL حدود المحاولات بين جميع النسخ، وتُرفض الرموز القديمة المختارة يدويًا. اترك `ACCESS_CODE` فارغًا للتعطيل.
 
 ## النموذج الافتراضي ومسارات النماذج
 
@@ -239,7 +241,7 @@ NEXT_PUBLIC_ENABLE_PPTX_IMPORT=true
 # توليد متوازي لمحتوى المشاهد؛ 0 أو عدم التعيين يعني توليد تسلسلي
 PARALLEL_SCENE_CONCURRENCY=3
 
-# السماح بالوصول إلى localhost والشبكات المحلية؛ فقط للنشر الذاتي/الشبكات الداخلية
+# السماح لموفري الخادم المستقلين بإرجاع عناوين وسائط من شبكة خاصة
 ALLOW_LOCAL_NETWORKS=true
 
 # خدمة تصيير MP4 اختيارية

@@ -56,7 +56,9 @@ describe('GET one agent session', () => {
   it('returns an owned session', async () => {
     const response = await call();
     expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toMatchObject({ id: 'session-1', status: 'running' });
+    const body = await response.json();
+    expect(body).toMatchObject({ id: 'session-1', status: 'running' });
+    expect(body).not.toHaveProperty('ownerId');
   });
 
   it('does not expose a foreign session', async () => {

@@ -29,6 +29,7 @@ import { apiError, apiSuccess } from '@/lib/server/api-response';
 import { createLogger } from '@/lib/logger';
 import { validateUrlForSSRF } from '@/lib/server/ssrf-guard';
 import { getServerImageRouteAdapter } from '@/lib/server/providers/image-route-adapters';
+import { createStrictFetchTransport } from '@/lib/server/strict-fetch';
 
 const log = createLogger('VerifyImageProvider');
 
@@ -56,6 +57,15 @@ export async function POST(request: NextRequest) {
     const managed = isServerConfiguredProvider('image', providerId);
     const clientApiKey = managed ? undefined : request.headers.get('x-api-key') || undefined;
     const clientBaseUrl = managed ? undefined : request.headers.get('x-base-url') || undefined;
+    const provider = IMAGE_PROVIDERS[providerId];
+
+    if (!managed && !clientBaseUrl && provider?.trustedDefaultBaseUrlOnly) {
+      return apiError(
+        'INVALID_URL',
+        403,
+        'This provider endpoint must be configured by the server operator',
+      );
+    }
 
     if (clientBaseUrl && process.env.NODE_ENV === 'production') {
       const ssrfError = await validateUrlForSSRF(clientBaseUrl);
@@ -67,7 +77,6 @@ export async function POST(request: NextRequest) {
     const apiKey = resolveImageApiKey(providerId, clientApiKey);
     const baseUrl = resolveImageBaseUrl(providerId, clientBaseUrl);
 
-    const provider = IMAGE_PROVIDERS[providerId];
     if (provider?.requiresApiKey && !apiKey) {
       return apiError('MISSING_API_KEY', 400, 'No API key configured');
     }
@@ -83,12 +92,19 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const result = await testImageConnectivity({
-      providerId,
-      apiKey,
-      baseUrl,
-      model,
-    });
+    const transport = clientBaseUrl ? createStrictFetchTransport() : undefined;
+    let result;
+    try {
+      result = await testImageConnectivity({
+        providerId,
+        apiKey,
+        baseUrl,
+        model,
+        fetchImpl: transport?.fetch,
+      });
+    } finally {
+      await transport?.close().catch(() => undefined);
+    }
 
     if (!result.success) {
       return apiError('UPSTREAM_ERROR', 500, result.message);

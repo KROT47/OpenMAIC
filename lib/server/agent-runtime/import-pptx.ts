@@ -20,6 +20,7 @@ import type { AgentTool } from '@earendil-works/pi-agent-core';
 import type { Slide } from '@openmaic/dsl';
 import type { AgentSessionMaterial } from '@openmaic/storage';
 import type { OssUpload } from '@openmaic/importer';
+import type { ZipParseLimits } from '../../../packages/@openmaic/importer/src/parser/ZipParser';
 
 import { buildVideoManifestFromOutlines } from '@/lib/media/video-manifest';
 import type { AppDocumentOutline } from '@/lib/document-store/persistence-types';
@@ -41,6 +42,14 @@ export const IMPORT_PPTX_REQUIREMENT_PREFIX = 'import_pptx:';
 export const MAX_IMPORT_SLIDES = 80;
 export const MAX_IMPORT_BYTES = 8 * 1024 * 1024;
 export const PARSE_PPTX_TIMEOUT_MS = 90_000;
+export const PPTX_ZIP_LIMITS: Required<ZipParseLimits> = {
+  maxEntries: 2_000,
+  maxEntryUncompressedBytes: 16 * 1024 * 1024,
+  maxTotalUncompressedBytes: 128 * 1024 * 1024,
+  maxMediaBytes: 96 * 1024 * 1024,
+  maxCompressionRatio: 200,
+  maxConcurrency: 2,
+};
 
 /** Next-step hint after import. Inspection and repair come before TTS. */
 export const AFTER_IMPORT_NEXT_STEP =
@@ -273,7 +282,9 @@ export async function parsePptxIsolated(
   const slides = await new Promise<Slide[]>((resolve, reject) => {
     let worker: ParsePptxWorker;
     try {
-      worker = new WorkerImpl(workerFile, { workerData: { buffer: copy } });
+      worker = new WorkerImpl(workerFile, {
+        workerData: { buffer: copy, zipLimits: PPTX_ZIP_LIMITS },
+      });
     } catch (error) {
       reject(asError(error));
       return;

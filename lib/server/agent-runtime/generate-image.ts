@@ -23,7 +23,7 @@ import {
 import { createLogger } from '@/lib/logger';
 import { resolveImageSize } from '@/lib/server/image-sizing';
 import { recordGenerationUsage } from '@/lib/server/usage-storage';
-import { validateUrlForSSRF } from '@/lib/server/ssrf-guard';
+import { createStrictFetchTransport } from '@/lib/server/strict-fetch';
 import {
   DownloadByteBudget,
   MAX_REMOTE_IMAGE_BATCH_BYTES,
@@ -103,25 +103,6 @@ function isTimeout(signal: AbortSignal): boolean {
   );
 }
 
-async function fetchGeneratedImage(url: string, signal: AbortSignal): Promise<Response> {
-  const maxRedirects = 5;
-  let currentUrl = url;
-  for (let hop = 0; ; hop++) {
-    throwIfAborted(signal);
-    const ssrfError = await validateUrlForSSRF(currentUrl);
-    throwIfAborted(signal);
-    if (ssrfError) throw new Error(ssrfError);
-
-    const response = await fetch(currentUrl, { redirect: 'manual', signal });
-    if (response.status < 300 || response.status >= 400) return response;
-
-    const location = response.headers.get('location');
-    if (!location) throw new Error('Image download redirect has no Location header');
-    if (hop >= maxRedirects) throw new Error('Image download exceeded 5 redirects');
-    currentUrl = new URL(location, currentUrl).href;
-  }
-}
-
 async function imageBytes(
   result: ImageGenerationResult,
   signal: AbortSignal,
@@ -136,18 +117,26 @@ async function imageBytes(
   }
   if (!result.url) throw new Error('Image provider returned neither URL nor image bytes');
 
-  const response = await fetchGeneratedImage(result.url, signal);
-  if (!response.ok) throw new Error(`Generated image download failed: HTTP ${response.status}`);
-  const mime = response.headers.get('content-type')?.split(';')[0]?.trim() || 'image/png';
-  if (!mime.startsWith('image/')) {
-    throw new Error(`Generated image download returned unexpected content type: ${mime}`);
-  }
-  const bytes = await readResponseBodyWithLimit(response, {
-    maxBytes: MAX_REMOTE_IMAGE_BYTES,
-    aggregateBudget: new DownloadByteBudget(MAX_REMOTE_IMAGE_BATCH_BYTES),
+  const transport = createStrictFetchTransport({
+    allowLocalNetworks:
+      process.env.ALLOW_LOCAL_NETWORKS === 'true' || process.env.ALLOW_LOCAL_NETWORKS === '1',
   });
-  throwIfAborted(signal);
-  return { bytes, mime };
+  try {
+    const response = await transport.fetch(result.url, { signal });
+    if (!response.ok) throw new Error(`Generated image download failed: HTTP ${response.status}`);
+    const mime = response.headers.get('content-type')?.split(';')[0]?.trim() || 'image/png';
+    if (!mime.startsWith('image/')) {
+      throw new Error(`Generated image download returned unexpected content type: ${mime}`);
+    }
+    const bytes = await readResponseBodyWithLimit(response, {
+      maxBytes: MAX_REMOTE_IMAGE_BYTES,
+      aggregateBudget: new DownloadByteBudget(MAX_REMOTE_IMAGE_BATCH_BYTES),
+    });
+    throwIfAborted(signal);
+    return { bytes, mime };
+  } finally {
+    await transport.close().catch(() => undefined);
+  }
 }
 
 /**

@@ -36,6 +36,8 @@ export interface ZipParseLimits {
   maxTotalUncompressedBytes?: number;
   /** Maximum uncompressed size across media entries under `ppt/media/` (bytes). */
   maxMediaBytes?: number;
+  /** Maximum ratio of uncompressed to compressed bytes for one entry. */
+  maxCompressionRatio?: number;
   /** Maximum concurrent zip entry reads during parsing. */
   maxConcurrency?: number;
 }
@@ -47,6 +49,12 @@ function throwZipLimitExceeded(reason: string): never {
 function readUncompressedSize(file: JSZipObject): number | undefined {
   const data = (file as unknown as { _data?: { uncompressedSize?: number } })._data;
   const size = data?.uncompressedSize;
+  return typeof size === 'number' && Number.isFinite(size) ? size : undefined;
+}
+
+function readCompressedSize(file: JSZipObject): number | undefined {
+  const data = (file as unknown as { _data?: { compressedSize?: number } })._data;
+  const size = data?.compressedSize;
   return typeof size === 'number' && Number.isFinite(size) ? size : undefined;
 }
 
@@ -96,9 +104,31 @@ export async function parseZip(
   for (const [rawPath, file] of entries) {
     const normalizedPath = rawPath.replace(/\\/g, '/');
     const size = readUncompressedSize(file);
-    if (size === undefined) continue;
+    if (size === undefined) {
+      if (
+        limits.maxEntryUncompressedBytes !== undefined ||
+        limits.maxTotalUncompressedBytes !== undefined ||
+        (normalizedPath.startsWith('ppt/media/') && limits.maxMediaBytes !== undefined)
+      ) {
+        throwZipLimitExceeded(`${normalizedPath} has no declared uncompressed size`);
+      }
+      continue;
+    }
 
     knownSizeByPath.set(normalizedPath, size);
+
+    if (limits.maxCompressionRatio !== undefined) {
+      const compressedSize = readCompressedSize(file);
+      if (compressedSize === undefined) {
+        throwZipLimitExceeded(`${normalizedPath} has no declared compressed size`);
+      }
+      const ratio = size / Math.max(1, compressedSize);
+      if (ratio > limits.maxCompressionRatio) {
+        throwZipLimitExceeded(
+          `${normalizedPath} compression ratio ${ratio.toFixed(1)} > maxCompressionRatio ${limits.maxCompressionRatio}`,
+        );
+      }
+    }
 
     if (limits.maxEntryUncompressedBytes !== undefined && size > limits.maxEntryUncompressedBytes) {
       throwZipLimitExceeded(

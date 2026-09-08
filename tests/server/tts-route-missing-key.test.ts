@@ -133,10 +133,7 @@ describe('POST /api/generate/tts missing-key contract (#665)', () => {
     );
   });
 
-  it('does not pre-empt keyless providers (e.g. voxcpm-tts) with the key guard', async () => {
-    // The local base URL is the provider's credential path; the key guard must
-    // not fire for a keyless provider (and localhost needs the self-host flag).
-    vi.stubEnv('ALLOW_LOCAL_NETWORKS', 'true');
+  it('rejects a client base URL even for a keyless provider', async () => {
     const { POST } = await import('@/app/api/generate/tts/route');
     const res = await POST(
       ttsRequest({
@@ -146,8 +143,8 @@ describe('POST /api/generate/tts missing-key contract (#665)', () => {
       }),
     );
 
-    expect(res.status).toBe(200);
-    expect(mocks.generateTTS).toHaveBeenCalled();
+    expect(res.status).toBe(403);
+    expect(mocks.generateTTS).not.toHaveBeenCalled();
   });
 
   it('keeps the 500 GENERATION_FAILED envelope for a non-key library failure', async () => {

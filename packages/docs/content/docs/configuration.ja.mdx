@@ -129,7 +129,7 @@ Lemonade はローカルサービスで API key 不要です：
 IMAGE_LEMONADE_BASE_URL=http://localhost:13305/v1
 ```
 
-ComfyUI Image は API key 不要で、デフォルトで `http://localhost:8188` に接続します。設定画面で ComfyUI Base URL を指定し、OpenMAIC の `public/` ディレクトリに API 形式でエクスポートした workflow JSON（`comfyui-*.json` またはファイル名に `workflow` を含む）を置くと自動検出され、選択可能になります。Docker 本番環境ではビルド前に workflow を追加するか、単一の workflow ファイルをコンテナの `/app/public/` にマウントしてください。`comfyui-image` はサーバー管理 provider ではないため、本番環境でホストの ComfyUI に接続する場合は `ALLOW_LOCAL_NETWORKS=true` を設定してください。
+ComfyUI Image に API key は不要です。プライベート endpoint はサーバー管理者が `IMAGE_COMFYUI_BASE_URL=http://localhost:8188` で設定する必要があり、クライアント指定のプライベート endpoint は拒否されます。API 形式でエクスポートした workflow JSON を OpenMAIC の `public/` に置き、ファイル名を `comfyui-*.json` または `workflow` を含む名前にしてください。Docker ではビルド前に workflow を追加するか `/app/public/` にマウントします。管理者設定の自律 media provider がプライベートネットワーク上の生成ファイル URL を返す場合に限り、`ALLOW_LOCAL_NETWORKS=true` を設定してください。
 
 ## 動画生成プロバイダー
 
@@ -190,10 +190,12 @@ Brave と SearXNG は API key 不要です。フロントエンドでは生成�
 共有デプロイ（社内デモ、授業など）ではアクセスコードを設定し、訪問者にアプリ表示前のパスワード入力を求められます。
 
 ```bash
-ACCESS_CODE=your-secret-code
+node -e "console.log('ACCESS_CODE=omc_'+require('node:crypto').randomBytes(32).toString('base64url'))"
+DATABASE_URL=postgres://...
+ACCESS_CODE_TRUSTED_IP_HEADER=x-real-ip
 ```
 
-訪問者は一度だけ入力を求められ、コードは HTTP-only cookie に保存されます。空欄にすると無効になります。
+生成された `ACCESS_CODE` をコピーし、信頼するリバースプロキシが上書きする IP ヘッダーを指定します。PostgreSQL が全インスタンスの試行制限を共有します。従来の手入力コードは拒否されます。無効にするには `ACCESS_CODE` を空欄にします。
 
 ## デフォルトモデルとモデルルーティング
 
@@ -239,7 +241,7 @@ PPTX インポートはまだ実験的で、解析結果は完全に授業デー
 # シーン内容の並列生成。0 または未設定は逐次生成
 PARALLEL_SCENE_CONCURRENCY=3
 
-# localhost や内部ネットワークへのアクセス許可。セルフホスト／プライベートネットワーク向け
+# 自律 server provider がプライベートネットワーク上の media URL を返すことを許可
 ALLOW_LOCAL_NETWORKS=true
 
 # 任意の MP4 レンダリングサービス

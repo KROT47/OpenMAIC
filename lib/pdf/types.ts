@@ -37,6 +37,8 @@ export interface PDFParserConfig {
   allowEnvFallback?: boolean;
   /** Skip image extraction when the caller needs text only. */
   textOnly?: boolean;
+  /** Server-only transport seam for caller-controlled provider URLs. */
+  fetchImpl?: typeof fetch;
 }
 
 // Note: ParsedPdfContent is imported from @/lib/types/pdf to avoid duplication

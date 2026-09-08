@@ -129,7 +129,7 @@ Lemonade 是本地服务，不需要 key：
 IMAGE_LEMONADE_BASE_URL=http://localhost:13305/v1
 ```
 
-ComfyUI Image 不需要 API key，默认连接 `http://localhost:8188`。在设置中填写 ComfyUI Base URL，并把以 API 格式导出的 workflow JSON 放入 OpenMAIC 的 `public/` 目录；文件名使用 `comfyui-*.json` 或包含 `workflow`，设置页会自动发现这些文件并将其作为可选 workflow。Docker 部署时还需要在构建镜像前加入 workflow，或把单个 workflow 文件挂载到容器的 `/app/public/` 目录。由于 `comfyui-image` 不是服务端托管 provider，生产环境连接宿主机 ComfyUI 时还需要设置 `ALLOW_LOCAL_NETWORKS=true`。
+ComfyUI Image 不需要 API key。私有端点必须由服务器管理员通过 `IMAGE_COMFYUI_BASE_URL=http://localhost:8188` 配置；客户端提交的私有端点会被拒绝。请将以 API 格式导出的 workflow JSON 放入 OpenMAIC 的 `public/` 目录，文件名使用 `comfyui-*.json` 或包含 `workflow`。Docker 部署时请在构建镜像前加入 workflow，或挂载到 `/app/public/`。仅当管理员配置的自主媒体 provider 返回内网中的生成文件 URL 时，才设置 `ALLOW_LOCAL_NETWORKS=true`。
 
 ## 视频生成提供方
 
@@ -190,10 +190,12 @@ Brave 和 SearXNG 不需要 API key；前端可以在每次生成时选择是否
 对共享部署（内部 demo、课堂），可以设置访问码，访客先输密码才能看到应用：
 
 ```bash
-ACCESS_CODE=your-secret-code
+node -e "console.log('ACCESS_CODE=omc_'+require('node:crypto').randomBytes(32).toString('base64url'))"
+DATABASE_URL=postgres://...
+ACCESS_CODE_TRUSTED_IP_HEADER=x-real-ip
 ```
 
-访客只会被提示一次，密码存在 HTTP-only cookie 里。留空则关闭。
+复制生成的 `ACCESS_CODE`，并将 IP 标头设置为可信反向代理会覆盖的标头。PostgreSQL 会在所有实例间共享尝试限制；旧的自选密码会被拒绝。留空 `ACCESS_CODE` 则关闭。
 
 ## 默认模型和模型路由
 
@@ -239,7 +241,7 @@ PPTX 导入目前仍是实验性入口，解析结果尚未完整接入课堂数
 # 场景内容并行生成；0 或未设置表示串行
 PARALLEL_SCENE_CONCURRENCY=3
 
-# 允许访问 localhost、内网等本地网络地址；仅用于自托管/内网部署
+# 允许自主服务器 provider 返回内网媒体 URL
 ALLOW_LOCAL_NETWORKS=true
 
 # 可选的 MP4 渲染服务

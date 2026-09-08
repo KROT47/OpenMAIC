@@ -662,7 +662,7 @@ export async function parseWithMinerUDocument(
   }
 
   // POST /file_parse
-  const response = await fetch(`${config.baseUrl}/file_parse`, {
+  const response = await (config.fetchImpl ?? fetch)(`${config.baseUrl}/file_parse`, {
     method: 'POST',
     headers,
     body: formData,

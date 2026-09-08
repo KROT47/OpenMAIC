@@ -229,20 +229,18 @@ describe('resolveModel — per-stage resolution order', () => {
     expect(call.apiKey).toBe('server-key');
   });
 
-  it('keeps client apiKey/baseUrl/providerType for an unrouted stage (x-model honored)', async () => {
+  it('rejects a client baseUrl for an unmanaged model', async () => {
     process.env.MODEL_ROUTES = JSON.stringify({ 'scene-content': 'openai:gpt-5.4' });
     const { resolveModel } = await import('@/lib/server/resolve-model');
-    await resolveModel({
-      stage: 'quiz-grade',
-      modelString: 'openai:gpt-5.4-mini',
-      apiKey: 'client-key',
-      baseUrl: 'https://client.example/v1',
-      providerType: 'openai',
-    });
-    const call = mocks.getModelCalls.at(-1)!;
-    expect(call.providerType).toBe('openai');
-    expect(call.baseUrl).toBe('https://client.example/v1');
-    expect(call.apiKey).toBe('client-key');
+    await expect(
+      resolveModel({
+        stage: 'quiz-grade',
+        modelString: 'openai:gpt-5.4-mini',
+        apiKey: 'client-key',
+        baseUrl: 'https://client.example/v1',
+        providerType: 'openai',
+      }),
+    ).rejects.toThrow('Custom model base URLs must be configured by the server operator');
   });
 
   it('rejects Bedrock unless the server operator explicitly enabled it', async () => {

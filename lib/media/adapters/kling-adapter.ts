@@ -135,7 +135,7 @@ export async function testKlingConnectivity(
     request: () => {
       const { accessKey, secretKey } = parseApiKey(config.apiKey);
       const token = generateJWT(accessKey, secretKey);
-      return fetch(`${baseUrl}/v1/videos/text2video/connectivity-test`, {
+      return (config.fetchImpl ?? fetch)(`${baseUrl}/v1/videos/text2video/connectivity-test`, {
         method: 'GET',
         redirect: 'manual',
         headers: { Authorization: `Bearer ${token}` },
@@ -153,6 +153,7 @@ async function submitTask(
   token: string,
   model: string,
   options: VideoGenerationOptions,
+  fetchImpl: NonNullable<VideoGenerationConfig['fetchImpl']>,
 ): Promise<string> {
   const body: Record<string, unknown> = {
     model_name: model,
@@ -164,7 +165,7 @@ async function submitTask(
   if (options.duration) body.duration = String(options.duration);
   if (options.aspectRatio) body.aspect_ratio = options.aspectRatio;
 
-  const response = await fetch(`${baseUrl}/v1/videos/text2video`, {
+  const response = await fetchImpl(`${baseUrl}/v1/videos/text2video`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -197,8 +198,9 @@ async function pollTask(
   baseUrl: string,
   token: string,
   taskId: string,
+  fetchImpl: NonNullable<VideoGenerationConfig['fetchImpl']>,
 ): Promise<KlingPollResponse['data']> {
-  const response = await fetch(`${baseUrl}/v1/videos/text2video/${taskId}`, {
+  const response = await fetchImpl(`${baseUrl}/v1/videos/text2video/${taskId}`, {
     method: 'GET',
     headers: { Authorization: `Bearer ${token}` },
   });
@@ -228,14 +230,15 @@ export async function generateWithKling(
   const baseUrl = config.baseUrl || DEFAULT_BASE_URL;
   const { accessKey, secretKey } = parseApiKey(config.apiKey);
   const token = generateJWT(accessKey, secretKey);
+  const fetchImpl = config.fetchImpl ?? fetch;
 
   return runPolledTask<VideoGenerationResult>({
     submit: async () => ({
       status: 'submitted',
-      taskId: await submitTask(baseUrl, token, model, options),
+      taskId: await submitTask(baseUrl, token, model, options, fetchImpl),
     }),
     poll: async (taskId) => {
-      const result = await pollTask(baseUrl, token, taskId);
+      const result = await pollTask(baseUrl, token, taskId, fetchImpl);
 
       if (result.task_status === 'succeed') {
         const video = result.task_result?.videos?.[0];

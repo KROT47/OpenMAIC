@@ -3,8 +3,9 @@ import { randomUUID } from 'crypto';
 import { apiSuccess, apiError, API_ERROR_CODES } from '@/lib/server/api-response';
 import {
   buildRequestOrigin,
+  createClassroom,
+  InvalidClassroomError,
   isValidClassroomId,
-  persistClassroom,
   readClassroom,
 } from '@/lib/server/classroom-storage';
 import { createLogger } from '@/lib/logger';
@@ -20,7 +21,7 @@ export async function POST(request: NextRequest) {
     stageId = stage?.id;
     sceneCount = scenes?.length;
 
-    if (!stage || !scenes) {
+    if (!stage || !Array.isArray(scenes)) {
       return apiError(
         API_ERROR_CODES.MISSING_REQUIRED_FIELD,
         400,
@@ -28,13 +29,22 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const id = stage.id || randomUUID();
+    const id = randomUUID();
     const baseUrl = buildRequestOrigin(request);
-
-    const persisted = await persistClassroom({ id, stage: { ...stage, id }, scenes }, baseUrl);
+    const persisted = await createClassroom(
+      {
+        id,
+        stage: { ...stage, id },
+        scenes: scenes.map((scene) => ({ ...scene, stageId: id })),
+      },
+      baseUrl,
+    );
 
     return apiSuccess({ id: persisted.id, url: persisted.url }, 201);
   } catch (error) {
+    if (error instanceof InvalidClassroomError) {
+      return apiError(API_ERROR_CODES.INVALID_REQUEST, 400, error.message);
+    }
     log.error(
       `Classroom storage failed [stageId=${stageId ?? 'unknown'}, scenes=${sceneCount ?? 0}]:`,
       error,

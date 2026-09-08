@@ -22,7 +22,6 @@ import {
 import type { TTSProviderId } from '@/lib/audio/types';
 import { createLogger } from '@/lib/logger';
 import { apiError, apiSuccess } from '@/lib/server/api-response';
-import { validateUrlForSSRF } from '@/lib/server/ssrf-guard';
 import { VOXCPM_AUTO_VOICE_ID, VOXCPM_TTS_PROVIDER_ID } from '@/lib/audio/voxcpm';
 import { QwenVoiceCloneError, qwenVoiceCloneErrorMessage } from '@/lib/audio/qwen-voice-clone';
 import { isQwenCloneVoice } from '@/lib/audio/constants';
@@ -95,10 +94,11 @@ export async function POST(req: NextRequest) {
     const managed = isServerConfiguredProvider('tts', ttsProviderId);
     const clientBaseUrl = managed ? undefined : ttsBaseUrl || undefined;
     if (clientBaseUrl) {
-      const ssrfError = await validateUrlForSSRF(clientBaseUrl);
-      if (ssrfError) {
-        return apiError('INVALID_URL', 403, ssrfError);
-      }
+      return apiError(
+        'INVALID_URL',
+        403,
+        'Custom TTS base URLs must be configured by the server operator',
+      );
     }
 
     const apiKey = resolveTTSApiKey(ttsProviderId, managed ? undefined : ttsApiKey || undefined);

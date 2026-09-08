@@ -28,6 +28,7 @@ import type { VideoProviderId } from '@/lib/media/types';
 import { apiError, apiSuccess } from '@/lib/server/api-response';
 import { createLogger } from '@/lib/logger';
 import { validateUrlForSSRF } from '@/lib/server/ssrf-guard';
+import { createStrictFetchTransport } from '@/lib/server/strict-fetch';
 
 const log = createLogger('VerifyVideoProvider');
 
@@ -72,12 +73,19 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const result = await testVideoConnectivity({
-      providerId,
-      apiKey,
-      baseUrl,
-      model,
-    });
+    const transport = clientBaseUrl ? createStrictFetchTransport() : undefined;
+    let result;
+    try {
+      result = await testVideoConnectivity({
+        providerId,
+        apiKey,
+        baseUrl,
+        model,
+        fetchImpl: transport?.fetch,
+      });
+    } finally {
+      await transport?.close().catch(() => undefined);
+    }
 
     if (!result.success) {
       return apiError('UPSTREAM_ERROR', 500, result.message);

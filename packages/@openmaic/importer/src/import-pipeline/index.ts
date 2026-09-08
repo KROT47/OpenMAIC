@@ -17,7 +17,7 @@
  */
 import { normalizeSlideWith, type Slide } from '@openmaic/dsl';
 import type { Output } from '../adapter/types';
-import { parseZip } from '../parser/ZipParser';
+import { parseZip, type ZipParseLimits } from '../parser/ZipParser';
 import { buildPresentation } from '../model/Presentation';
 import { toPptxtojsonFormat } from '../adapter/toPptxtojson';
 import type { ImportContext } from './types';
@@ -36,6 +36,7 @@ const FALLBACK_VIEWPORT_SIZE = 1280;
 export type OssUpload = (blob: Blob, filename: string, dir?: string) => Promise<string>;
 
 export interface ImportPptxOptions {
+  zipLimits?: ZipParseLimits;
   /**
    * Upload media (images, audio, video) to remote storage and return the
    * public URL. If omitted, images keep their base64 data URLs and media
@@ -125,7 +126,7 @@ export async function importPptx(
   options: ImportPptxOptions = {},
 ): Promise<Slide[]> {
   const buffer = await toArrayBuffer(input);
-  const files = await parseZip(buffer);
+  const files = await parseZip(buffer, options.zipLimits);
   const presentation = buildPresentation(files);
   const json = await toPptxtojsonFormat(presentation, files, 'base64');
   return parsedToSlides(json, options);

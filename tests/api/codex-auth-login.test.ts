@@ -188,7 +188,7 @@ describe('/api/codex/auth/login', () => {
       loginManager: new CodexLoginManager({ vault }),
       modelDiscovery: modelDiscoveryStub(),
     };
-    process.env.ACCESS_CODE = 'login-route-secret';
+    process.env.ACCESS_CODE = 'omc_jmZ633OgDh2O7NZel4OUjqYO-hDTNmKWYXBUQvbsI1I';
     const route = await import('@/app/api/codex/auth/login/route');
 
     for (const [handler, request] of [
@@ -207,7 +207,7 @@ describe('/api/codex/auth/login', () => {
       expectNoStore(response);
     }
 
-    const token = createAccessToken('login-route-secret');
+    const token = createAccessToken(process.env.ACCESS_CODE);
     const authorizedDelete = await route.DELETE(
       new Request('http://localhost/api/codex/auth/login', {
         method: 'DELETE',

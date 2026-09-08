@@ -16,6 +16,27 @@ export interface CappedBody {
   exceeded: () => boolean;
 }
 
+export class UploadTooLargeError extends Error {
+  override readonly name = 'UploadTooLargeError';
+}
+
+/** Parse multipart only after wrapping the actual incoming bytes in a hard cap. */
+export async function parseCappedFormData(request: Request, capBytes: number): Promise<FormData> {
+  const declared = Number(request.headers.get('content-length') ?? '0');
+  if (Number.isFinite(declared) && declared > capBytes) throw new UploadTooLargeError();
+  if (!request.body) throw new TypeError('Request body is missing');
+
+  const capped = capBodyStream(request.body, capBytes);
+  try {
+    return await new Response(capped.stream, {
+      headers: { 'content-type': request.headers.get('content-type') ?? '' },
+    }).formData();
+  } catch (error) {
+    if (capped.exceeded()) throw new UploadTooLargeError();
+    throw error;
+  }
+}
+
 export function capBodyStream(body: ReadableStream<Uint8Array>, capBytes: number): CappedBody {
   let total = 0;
   let tripped = false;

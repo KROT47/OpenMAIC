@@ -114,7 +114,7 @@ interface ModelsApiResponse {
 export async function fetchModels(
   baseUrl: string,
   apiKey: string,
-  opts: { modelsUrlOverride?: string } = {},
+  opts: { modelsUrlOverride?: string; fetchImpl?: typeof fetch } = {},
 ): Promise<FetchedModel[]> {
   const candidates = buildModelsUrlCandidates(baseUrl, opts);
 
@@ -127,6 +127,7 @@ export async function fetchModels(
         redirect: 'manual',
       },
       FETCH_TIMEOUT_MS,
+      opts.fetchImpl,
     );
 
     if (res.status >= 300 && res.status < 400) {

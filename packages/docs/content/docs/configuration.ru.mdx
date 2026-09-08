@@ -129,7 +129,7 @@ Lemonade — локальный сервис, не требует ключа:
 IMAGE_LEMONADE_BASE_URL=http://localhost:13305/v1
 ```
 
-ComfyUI Image не требует API key, по умолчанию подключается к `http://localhost:8188`. В настройках укажите ComfyUI Base URL и положите экспортированный в формате API workflow JSON в папку `public/` OpenMAIC; имя файла должно соответствовать `comfyui-*.json` или содержать `workflow`. Настройки автоматически обнаружат эти файлы и предложат их как опции workflow. При Docker-деплое нужно добавить workflow в образ или смонтировать отдельный файл в `/app/public/`. Поскольку `comfyui-image` — не серверный провайдер, в продакшене для подключения к ComfyUI на хосте нужно установить `ALLOW_LOCAL_NETWORKS=true`.
+ComfyUI Image не требует API key. Приватный endpoint должен настроить оператор сервера через `IMAGE_COMFYUI_BASE_URL=http://localhost:8188`; приватные endpoint-ы от клиента отклоняются. Экспортированный в формате API workflow JSON положите в папку `public/` OpenMAIC; имя файла должно соответствовать `comfyui-*.json` или содержать `workflow`. При Docker-деплое добавьте workflow в образ или смонтируйте его в `/app/public/`. Устанавливайте `ALLOW_LOCAL_NETWORKS=true` только если настроенный оператором автономный медиапровайдер возвращает URL созданных файлов во внутренней сети.
 
 ## Провайдеры генерации видео
 
@@ -190,10 +190,12 @@ Brave и SearXNG не требуют API key. На фронтенде есть �
 Для общих деплоев (внутренние демо, классы) можно задать пароль, чтобы посетители вводили его перед входом:
 
 ```bash
-ACCESS_CODE=your-secret-code
+node -e "console.log('ACCESS_CODE=omc_'+require('node:crypto').randomBytes(32).toString('base64url'))"
+DATABASE_URL=postgres://...
+ACCESS_CODE_TRUSTED_IP_HEADER=x-real-ip
 ```
 
-Код вводится один раз и сохраняется в HTTP-only cookie. Оставьте пустым для отключения.
+Скопируйте сгенерированный `ACCESS_CODE`. В качестве IP-заголовка укажите заголовок, который перезаписывает доверенный reverse proxy; PostgreSQL разделяет лимит попыток между всеми экземплярами. Старые пароли, выбранные вручную, отклоняются. Оставьте `ACCESS_CODE` пустым для отключения.
 
 ## Модель по умолчанию и маршруты моделей
 
@@ -239,7 +241,7 @@ NEXT_PUBLIC_ENABLE_PPTX_IMPORT=true
 # Параллельная генерация сцен; 0 или unset — последовательная
 PARALLEL_SCENE_CONCURRENCY=3
 
-# Разрешить доступ к localhost, внутренним сетям; только для self-hosted/внутренних деплоев
+# Разрешить автономным серверным провайдерам возвращать URL медиа из внутренней сети
 ALLOW_LOCAL_NETWORKS=true
 
 # Опциональный MP4 рендер-сервис

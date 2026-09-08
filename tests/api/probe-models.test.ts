@@ -1,10 +1,20 @@
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import type { NextRequest } from 'next/server';
 
-const mocks = vi.hoisted(() => ({ validateUrlForSSRF: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  validateUrlForSSRF: vi.fn(),
+  closeTransport: vi.fn().mockResolvedValue(undefined),
+}));
 
 vi.mock('@/lib/server/ssrf-guard', () => ({
   validateUrlForSSRF: mocks.validateUrlForSSRF,
+}));
+
+vi.mock('@/lib/server/strict-fetch', () => ({
+  createStrictFetchTransport: () => ({
+    fetch: (...args: Parameters<typeof fetch>) => fetch(...args),
+    close: mocks.closeTransport,
+  }),
 }));
 
 vi.mock('@/lib/logger', () => ({

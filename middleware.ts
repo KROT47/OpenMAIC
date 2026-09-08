@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { isAgentRuntimeConfigured, isProWorkbenchEnabled } from '@/lib/config/feature-flags';
+import {
+  getAccessCodeConfigurationError,
+  isAccessTokenTimestampValid,
+} from '@/lib/access-token-policy';
 
 /** Convert string to Uint8Array */
 function encode(str: string): Uint8Array {
@@ -21,6 +25,7 @@ async function verifyToken(token: string, accessCode: string): Promise<boolean> 
 
   const timestamp = token.substring(0, dotIndex);
   const signature = token.substring(dotIndex + 1);
+  if (!isAccessTokenTimestampValid(timestamp)) return false;
 
   const keyData = encode(accessCode);
   const key = await crypto.subtle.importKey(
@@ -62,14 +67,32 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
+  const accessCodeConfigurationError = getAccessCodeConfigurationError(accessCode);
+  const accessCodeConfigurationValid = !accessCodeConfigurationError;
+
   // Whitelist: access-code endpoints, health check
   if (pathname.startsWith('/api/access-code/') || pathname === '/api/health') {
     return NextResponse.next();
   }
 
+  if (!accessCodeConfigurationValid && pathname.startsWith('/api/')) {
+    return NextResponse.json(
+      {
+        success: false,
+        errorCode: 'INVALID_CONFIGURATION',
+        error: accessCodeConfigurationError,
+      },
+      { status: 503 },
+    );
+  }
+
   // Check cookie — validate HMAC signature, not just existence
   const cookie = request.cookies.get('openmaic_access');
-  if (cookie?.value && (await verifyToken(cookie.value, accessCode))) {
+  if (
+    accessCodeConfigurationValid &&
+    cookie?.value &&
+    (await verifyToken(cookie.value, accessCode))
+  ) {
     return NextResponse.next();
   }
 

@@ -22,6 +22,8 @@ export interface DocumentExtractorConfig {
   allowEnvFallback?: boolean;
   /** Skip image extraction when the caller needs text only. */
   textOnly?: boolean;
+  /** Server-only transport seam for caller-controlled provider URLs. */
+  fetchImpl?: typeof fetch;
 }
 
 export interface DocumentExtractorInput {

@@ -30,9 +30,10 @@ export async function testLemonadeImageConnectivity(
   config: ImageGenerationConfig,
 ): Promise<{ success: boolean; message: string }> {
   const baseUrl = normalizeBaseUrl(config.baseUrl);
+  const fetchImpl = config.fetchImpl ?? fetch;
 
   try {
-    const response = await fetch(`${baseUrl}/models`, {
+    const response = await fetchImpl(`${baseUrl}/models`, {
       redirect: 'manual',
       headers: authHeaders(config.apiKey),
     });
@@ -53,10 +54,11 @@ export async function generateWithLemonadeImage(
   options: ImageGenerationOptions,
 ): Promise<ImageGenerationResult> {
   const baseUrl = normalizeBaseUrl(config.baseUrl);
+  const fetchImpl = config.fetchImpl ?? fetch;
   const width = options.width || 1024;
   const height = options.height || 1024;
 
-  const response = await fetch(`${baseUrl}/images/generations`, {
+  const response = await fetchImpl(`${baseUrl}/images/generations`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

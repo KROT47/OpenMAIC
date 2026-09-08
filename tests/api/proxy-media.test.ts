@@ -2,7 +2,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { NextRequest } from 'next/server';
 
 const mocks = vi.hoisted(() => ({ validateUrlForSSRF: vi.fn() }));
-vi.mock('@/lib/server/ssrf-guard', () => ({ validateUrlForSSRF: mocks.validateUrlForSSRF }));
+vi.mock('@/lib/server/ssrf-guard', async () => ({
+  ...(await vi.importActual<typeof import('@/lib/server/ssrf-guard')>('@/lib/server/ssrf-guard')),
+  validateUrlForSSRF: mocks.validateUrlForSSRF,
+}));
 vi.mock('@/lib/logger', () => ({
   createLogger: () => ({
     info: vi.fn(),
@@ -46,11 +49,14 @@ describe('POST /api/proxy-media', () => {
 
     expect(res.status).toBe(200);
     expect(res.headers.get('Content-Type')).toBe('image/png');
+    expect(vi.mocked(fetch).mock.calls[0]?.[1]).toEqual(
+      expect.objectContaining({ redirect: 'manual', dispatcher: expect.anything() }),
+    );
     const buf = await res.arrayBuffer();
     expect(new Uint8Array(buf)).toEqual(bodyBytes);
   });
 
-  it('2. single redirect followed: validates both initial and redirect target', async () => {
+  it('2. single redirect is followed by the strict transport', async () => {
     mocks.validateUrlForSSRF.mockResolvedValue(null);
     const finalBytes = new Uint8Array([10, 20]);
     const fetchMock = vi
@@ -72,21 +78,13 @@ describe('POST /api/proxy-media', () => {
     const res = await postProxy({ url: 'https://example.com/redirect' });
 
     expect(res.status).toBe(200);
-    // validateUrlForSSRF called for both initial URL and redirect target
-    expect(mocks.validateUrlForSSRF).toHaveBeenCalledTimes(2);
+    expect(mocks.validateUrlForSSRF).toHaveBeenCalledTimes(1);
     expect(mocks.validateUrlForSSRF).toHaveBeenNthCalledWith(1, 'https://example.com/redirect');
-    expect(mocks.validateUrlForSSRF).toHaveBeenNthCalledWith(
-      2,
-      'https://cdn.example.com/final.png',
-    );
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it('3. redirect to private/blocked URL is rejected (SSRF guard)', async () => {
-    // Initial URL passes; redirect target is blocked
-    mocks.validateUrlForSSRF
-      .mockResolvedValueOnce(null) // initial URL: ok
-      .mockResolvedValueOnce('Local/private network URLs are not allowed'); // redirect target: blocked
+    mocks.validateUrlForSSRF.mockResolvedValueOnce(null);
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValueOnce(

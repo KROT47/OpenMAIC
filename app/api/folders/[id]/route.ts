@@ -14,7 +14,7 @@
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 
-import type { DocumentFolder, DocumentFolderStore } from '@openmaic/storage';
+import type { DocumentFolderStore } from '@openmaic/storage';
 
 import { isAgentRuntimeConfigured } from '@/lib/config/feature-flags';
 import { getOwnerScopedDocumentStore } from '@/lib/server/agent-runtime/owner-scoped-documents';
@@ -26,11 +26,6 @@ import { validateFolderName } from '@/lib/utils/folder-name-validation';
 export const runtime = 'nodejs';
 
 type Params = { params: Promise<{ id: string }> };
-
-/** The wire shape is the reference's `FolderItem`; see `app/api/folders/route.ts`. */
-function folderResponse(folder: DocumentFolder, userKey: string) {
-  return { ...folder, userKey };
-}
 
 function jsonError(status: number, code: string, message: string, headers?: Headers): NextResponse {
   return NextResponse.json({ error: { code, message } }, { status, headers });
@@ -82,7 +77,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       if (!updated) {
         return jsonError(404, 'FOLDER_NOT_FOUND', 'folder not found', responseHeaders);
       }
-      return ownerJson({ folder: folderResponse(updated, ownerId) }, 200, responseHeaders);
+      return ownerJson({ folder: updated }, 200, responseHeaders);
     } catch (error) {
       // The rename re-checks the name through the unique index; a duplicate
       // that slipped past the pre-check answers the same 409.

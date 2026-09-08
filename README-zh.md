@@ -268,11 +268,13 @@ pnpm build && pnpm start
 
 为部署添加站点级密码保护，在 `.env.local` 中设置：
 
-```env
-ACCESS_CODE=your-secret-code
+```bash
+node -e "console.log('ACCESS_CODE=omc_'+require('node:crypto').randomBytes(32).toString('base64url'))"
+DATABASE_URL=postgres://...
+ACCESS_CODE_TRUSTED_IP_HEADER=x-real-ip
 ```
 
-设置后，访客需要输入密码才能使用，所有 API 路由也会受到保护。不设置则无影响。
+复制生成的 `ACCESS_CODE`，并将 IP 标头设置为可信反向代理会覆盖的标头。旧的自选密码会被拒绝；`DATABASE_URL` 用于跨实例共享尝试限制。不设置 `ACCESS_CODE` 则无影响。
 
 ### Vercel 部署
 

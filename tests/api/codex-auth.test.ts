@@ -112,7 +112,7 @@ describe('/api/codex/auth', () => {
   });
 
   it('requires a valid openmaic_access cookie whenever ACCESS_CODE is configured', async () => {
-    process.env.ACCESS_CODE = 'route-secret';
+    process.env.ACCESS_CODE = 'omc_jmZ633OgDh2O7NZel4OUjqYO-hDTNmKWYXBUQvbsI1I';
     const route = await import('@/app/api/codex/auth/route');
 
     for (const handler of [route.GET, route.DELETE]) {
@@ -122,7 +122,7 @@ describe('/api/codex/auth', () => {
       await expect(response.json()).resolves.toEqual({ errorCode: 'UNAUTHORIZED' });
     }
 
-    const token = createAccessToken('route-secret');
+    const token = createAccessToken(process.env.ACCESS_CODE);
     const authorized = await route.GET(
       new Request('http://localhost/api/codex/auth', {
         headers: { cookie: `other=x; openmaic_access=${token}` },

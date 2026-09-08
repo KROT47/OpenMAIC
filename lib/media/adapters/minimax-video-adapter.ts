@@ -67,7 +67,7 @@ async function submitTask(
   };
   const resolution = resolutionMap[options.resolution || ''] || '768P';
 
-  const response = await fetch(`${baseUrl}/v1/video_generation`, {
+  const response = await (config.fetchImpl ?? fetch)(`${baseUrl}/v1/video_generation`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${config.apiKey}`,
@@ -109,7 +109,7 @@ async function pollTaskStatus(
   const baseUrl = (config.baseUrl || BASE_URL).replace(/\/$/, '');
   const url = `${baseUrl}/v1/query/video_generation?task_id=${encodeURIComponent(taskId)}`;
 
-  const response = await fetch(url, {
+  const response = await (config.fetchImpl ?? fetch)(url, {
     method: 'GET',
     headers: {
       Authorization: `Bearer ${config.apiKey}`,
@@ -131,7 +131,7 @@ async function retrieveFileDownloadUrl(
   const baseUrl = (config.baseUrl || BASE_URL).replace(/\/$/, '');
   const url = `${baseUrl}/v1/files/retrieve?file_id=${encodeURIComponent(fileId)}`;
 
-  const response = await fetch(url, {
+  const response = await (config.fetchImpl ?? fetch)(url, {
     method: 'GET',
     headers: {
       Authorization: `Bearer ${config.apiKey}`,
@@ -209,7 +209,7 @@ export async function testMiniMaxVideoConnectivity(
   try {
     const baseUrl = (config.baseUrl || BASE_URL).replace(/\/$/, '');
     // Submit a minimal task and immediately check if it returns a task_id
-    const response = await fetch(`${baseUrl}/v1/video_generation`, {
+    const response = await (config.fetchImpl ?? fetch)(`${baseUrl}/v1/video_generation`, {
       method: 'POST',
       redirect: 'manual',
       headers: {

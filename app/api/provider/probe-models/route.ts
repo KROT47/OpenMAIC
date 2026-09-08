@@ -3,6 +3,7 @@ import { createLogger } from '@/lib/logger';
 import { apiError, apiSuccess } from '@/lib/server/api-response';
 import { validateUrlForSSRF } from '@/lib/server/ssrf-guard';
 import { fetchModels, ModelFetchError } from '@/lib/server/model-fetch';
+import { createStrictFetchTransport } from '@/lib/server/strict-fetch';
 
 const log = createLogger('ProbeModels');
 
@@ -35,7 +36,16 @@ export async function POST(req: NextRequest) {
       if (ssrfError) return apiError('INVALID_REQUEST', 400, ssrfError);
     }
 
-    const models = await fetchModels(baseUrl, apiKey || '', { modelsUrlOverride: modelsUrl });
+    const transport = createStrictFetchTransport();
+    let models;
+    try {
+      models = await fetchModels(baseUrl, apiKey || '', {
+        modelsUrlOverride: modelsUrl,
+        fetchImpl: transport.fetch as typeof fetch,
+      });
+    } finally {
+      await transport.close().catch(() => undefined);
+    }
     const chatModels = models.filter((m) => !NON_CHAT_PATTERN.test(m.id));
 
     return apiSuccess({

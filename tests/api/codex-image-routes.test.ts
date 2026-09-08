@@ -16,6 +16,9 @@ const mocks = vi.hoisted(() => ({
   isServerConfigured: vi.fn(),
   isServerDisabled: vi.fn(),
   validateUrl: vi.fn(),
+  strictFetch: vi.fn(),
+  strictClose: vi.fn(),
+  createStrictTransport: vi.fn(),
   recordUsage: vi.fn(),
   log: {
     info: vi.fn(),
@@ -44,6 +47,11 @@ vi.mock('@/lib/server/codex/availability', () => ({
 vi.mock('@/lib/media/image-providers', () => ({
   IMAGE_PROVIDERS: {
     seedream: { id: 'seedream', requiresApiKey: true },
+    'trusted-default': {
+      id: 'trusted-default',
+      requiresApiKey: false,
+      trustedDefaultBaseUrlOnly: true,
+    },
     'codex-image': {
       id: 'codex-image',
       requiresApiKey: false,
@@ -67,6 +75,10 @@ vi.mock('@/lib/server/provider-config', () => ({
 
 vi.mock('@/lib/server/ssrf-guard', () => ({
   validateUrlForSSRF: mocks.validateUrl,
+}));
+
+vi.mock('@/lib/server/strict-fetch', () => ({
+  createStrictFetchTransport: mocks.createStrictTransport,
 }));
 
 vi.mock('@/lib/server/usage-storage', () => ({
@@ -115,6 +127,11 @@ describe('/api/generate/image Codex branch', () => {
     mocks.resolveModel.mockReturnValue(undefined);
     mocks.resolveProviderId.mockReturnValue(undefined);
     mocks.transport.mockResolvedValue({ base64: 'image-data', width: 1536, height: 864 });
+    mocks.createStrictTransport.mockReturnValue({
+      fetch: mocks.strictFetch,
+      close: mocks.strictClose,
+    });
+    mocks.strictClose.mockResolvedValue(undefined);
     mocks.recordUsage.mockResolvedValue(undefined);
   });
 
@@ -293,6 +310,48 @@ describe('/api/generate/image Codex branch', () => {
     expect(mocks.genericGenerate).toHaveBeenCalledTimes(1);
     expect(mocks.createTransport).not.toHaveBeenCalled();
   });
+
+  it('pins client-controlled provider requests to the strict transport', async () => {
+    mocks.resolveKey.mockReturnValueOnce('client-key');
+    mocks.resolveBaseUrl.mockReturnValueOnce('https://image.example/v1');
+    mocks.resolveModel.mockReturnValueOnce('image-model');
+    mocks.genericGenerate.mockResolvedValueOnce({ url: 'https://image.example/result.png' });
+
+    const response = await generateImage(
+      request('/api/generate/image', {
+        'x-image-provider': 'seedream',
+        'x-base-url': 'https://image.example/v1',
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(mocks.genericGenerate.mock.calls[0]?.[0]).toMatchObject({
+      fetchImpl: mocks.strictFetch,
+    });
+    expect(mocks.strictClose).toHaveBeenCalledOnce();
+  });
+
+  it('rejects a trusted default endpoint unless the provider is server-configured', async () => {
+    const response = await generateImage(
+      request('/api/generate/image', { 'x-image-provider': 'trusted-default' }),
+    );
+
+    expect(response.status).toBe(403);
+    expect(mocks.genericGenerate).not.toHaveBeenCalled();
+  });
+
+  it('preserves a trusted default endpoint configured by the server operator', async () => {
+    mocks.isServerConfigured.mockReturnValueOnce(true);
+    mocks.resolveBaseUrl.mockReturnValueOnce('http://127.0.0.1:9000');
+    mocks.genericGenerate.mockResolvedValueOnce({ base64: 'eA==' });
+
+    const response = await generateImage(
+      request('/api/generate/image', { 'x-image-provider': 'trusted-default' }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(mocks.genericGenerate).toHaveBeenCalledOnce();
+  });
 });
 
 describe('/api/verify-image-provider Codex branch', () => {
@@ -310,6 +369,11 @@ describe('/api/verify-image-provider Codex branch', () => {
     mocks.isServerDisabled.mockReturnValue(false);
     mocks.resolveModel.mockReturnValue(undefined);
     mocks.resolveProviderId.mockReturnValue(undefined);
+    mocks.createStrictTransport.mockReturnValue({
+      fetch: mocks.strictFetch,
+      close: mocks.strictClose,
+    });
+    mocks.strictClose.mockResolvedValue(undefined);
   });
 
   it('checks OAuth credentials without creating an image transport', async () => {
@@ -332,6 +396,35 @@ describe('/api/verify-image-provider Codex branch', () => {
     expect(mocks.transport).not.toHaveBeenCalled();
     expect(mocks.resolveKey).not.toHaveBeenCalled();
     expect(mocks.resolveBaseUrl).not.toHaveBeenCalled();
+    expect(mocks.genericConnectivity).not.toHaveBeenCalled();
+  });
+
+  it('pins client-controlled connectivity probes to the strict transport', async () => {
+    mocks.resolveKey.mockReturnValueOnce('client-key');
+    mocks.resolveBaseUrl.mockReturnValueOnce('https://image.example/v1');
+    mocks.resolveModel.mockReturnValueOnce('image-model');
+    mocks.genericConnectivity.mockResolvedValueOnce({ success: true, message: 'ok' });
+
+    const response = await verifyImageProvider(
+      request('/api/verify-image-provider', {
+        'x-image-provider': 'seedream',
+        'x-base-url': 'https://image.example/v1',
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(mocks.genericConnectivity.mock.calls[0]?.[0]).toMatchObject({
+      fetchImpl: mocks.strictFetch,
+    });
+    expect(mocks.strictClose).toHaveBeenCalledOnce();
+  });
+
+  it('rejects an unmanaged trusted default endpoint before probing it', async () => {
+    const response = await verifyImageProvider(
+      request('/api/verify-image-provider', { 'x-image-provider': 'trusted-default' }),
+    );
+
+    expect(response.status).toBe(403);
     expect(mocks.genericConnectivity).not.toHaveBeenCalled();
   });
 

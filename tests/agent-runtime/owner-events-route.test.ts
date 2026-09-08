@@ -109,7 +109,7 @@ describe('GET owner session events', () => {
     const event = await readChunk(reader);
 
     expect(event).toContain('id: 1\nevent: session_status');
-    expect(event).toContain('"ownerId":"user:requestor"');
+    expect(event).not.toContain('ownerId');
     expect(mocks.readOwnerSessionEventMaxId).toHaveBeenCalledWith('user:requestor');
     expect(mocks.readOwnerSessionEventsAfter).toHaveBeenCalledWith(
       'user:requestor',
@@ -507,9 +507,7 @@ describe('GET owner session events', () => {
     expect(await readChunk(reader)).toBe(': ping\n\n');
     const moved = await readChunk(reader);
     expect(moved).toContain('event: owner_moved');
-    expect(moved).toContain(
-      'data: {"type":"owner_moved","newOwnerId":"user:new","action":"reconnect"}',
-    );
+    expect(moved).toContain('data: {"type":"owner_moved","action":"reconnect"}');
     expect(await reader.read()).toEqual({ done: true, value: undefined });
     expect(mocks.readOwnerRetirement).toHaveBeenCalledWith('anon:old');
     expect(vi.getTimerCount()).toBe(0);

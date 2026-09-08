@@ -21,7 +21,7 @@
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 
-import type { DocumentFolder, DocumentFolderStore } from '@openmaic/storage';
+import type { DocumentFolderStore } from '@openmaic/storage';
 
 import { isAgentRuntimeConfigured } from '@/lib/config/feature-flags';
 import { getOwnerScopedDocumentStore } from '@/lib/server/agent-runtime/owner-scoped-documents';
@@ -32,16 +32,6 @@ import { createFolderForOwner, listFoldersForOwner } from '@/lib/server/folder-p
 import { validateFolderName } from '@/lib/utils/folder-name-validation';
 
 export const runtime = 'nodejs';
-
-/**
- * The wire shape is the reference's `FolderItem`: the owner id the folder
- * belongs to (its `userKey`) plus the stored row. The owner-bound store is
- * partitioned by `owner_id`, which is exactly the reference's `user_key`, so
- * the request owner IS the folder's user key.
- */
-function folderResponse(folder: DocumentFolder, userKey: string) {
-  return { ...folder, userKey };
-}
 
 /** The reference's error envelope: `{ error: { code, message } }`. */
 function jsonError(status: number, code: string, message: string, headers?: Headers): NextResponse {
@@ -56,11 +46,7 @@ export async function GET(req: NextRequest) {
     try {
       const store = (await getOwnerScopedDocumentStore(ownerId)) as unknown as DocumentFolderStore;
       const folders = await listFoldersForOwner(store);
-      return ownerJson(
-        { folders: folders.map((folder) => folderResponse(folder, ownerId)) },
-        200,
-        responseHeaders,
-      );
+      return ownerJson({ folders }, 200, responseHeaders);
     } catch (error) {
       console.error(`[Folders] Failed to list [owner=${ownerId}]:`, error);
       return jsonError(500, 'FOLDER_LIST_FAILED', 'Failed to list folders', responseHeaders);
@@ -100,7 +86,7 @@ export async function POST(req: NextRequest) {
     try {
       const store = (await getOwnerScopedDocumentStore(ownerId)) as unknown as DocumentFolderStore;
       const { folder } = await createFolderForOwner(store, trimmed, { reuseExisting: false });
-      return ownerJson({ folder: folderResponse(folder, ownerId) }, 200, responseHeaders);
+      return ownerJson({ folder }, 200, responseHeaders);
     } catch (error) {
       // The storage re-checks duplicates + count limit inside its owner-scoped
       // transaction; map its refusals onto the same machine codes the

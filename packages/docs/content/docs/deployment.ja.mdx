@@ -52,7 +52,7 @@ services:
       - ./server-providers.yml:/app/server-providers.yml:ro
 ```
 
-Docker コンテナ内の `localhost` はコンテナ自身を指します。ホスト上で Ollama、Lemonade、VoxCPM、ComfyUI を動かしている場合は `host.docker.internal` を使ってください。例：`http://host.docker.internal:11434/v1` や `http://host.docker.internal:8188`。Linux の Docker では通常、`openmaic` サービスに対して `extra_hosts: ["host.docker.internal:host-gateway"]` の追加が必要です。ComfyUI は現状サーバー管理型プロバイダーではないため、本番環境では `ALLOW_LOCAL_NETWORKS=true` を設定しないと SSRF 保護によりアクセスが拒否されます。
+Docker コンテナ内の `localhost` はコンテナ自身を指します。ホスト上で Ollama、Lemonade、VoxCPM、ComfyUI を動かしている場合は `host.docker.internal` を使ってください。例：`http://host.docker.internal:11434/v1` や `http://host.docker.internal:8188`。Linux の Docker では通常、`openmaic` サービスに `extra_hosts: ["host.docker.internal:host-gateway"]` の追加が必要です。プライベート provider endpoint は `IMAGE_COMFYUI_BASE_URL` などでサーバー側に設定してください。クライアント指定のプライベート URL は拒否されます。管理者設定の自律 media provider がプライベートネットワーク上の生成ファイル URL を返す場合に限り、`ALLOW_LOCAL_NETWORKS=true` を設定してください。
 
 ## 自前の仮想マシンでのセルフホスト
 

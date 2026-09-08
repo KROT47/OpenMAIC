@@ -139,6 +139,7 @@ export const IMAGE_PROVIDERS: Record<ImageProviderId, ImageProviderConfig> = {
     name: 'ComfyUI Image',
     requiresApiKey: false,
     defaultBaseUrl: 'http://localhost:8188',
+    trustedDefaultBaseUrlOnly: true,
     // No static models here — real selectable workflows are discovered at
     // runtime from GET /api/comfyui-workflows (files in public/) and picked
     // in Settings. A placeholder id like "comfyui-image" doesn't correspond
@@ -159,6 +160,7 @@ export const IMAGE_PROVIDERS: Record<ImageProviderId, ImageProviderConfig> = {
     name: 'Lemonade',
     requiresApiKey: false,
     defaultBaseUrl: 'http://localhost:13305/v1',
+    trustedDefaultBaseUrlOnly: true,
     icon: '/logos/lemonade.svg',
     models: [
       { id: 'Qwen-Image-GGUF', name: 'Qwen Image GGUF' },

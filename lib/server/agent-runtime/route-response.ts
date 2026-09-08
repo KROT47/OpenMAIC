@@ -2,6 +2,12 @@ import { NextResponse } from 'next/server';
 
 import { apiError, type ApiErrorCode } from '@/lib/server/api-response';
 
+/** Strip the internal owner partition key before a record crosses the HTTP boundary. */
+export function publicOwnerRecord<T extends { ownerId: string }>(record: T): Omit<T, 'ownerId'> {
+  const { ownerId: _ownerId, ...publicRecord } = record;
+  return publicRecord;
+}
+
 /**
  * Response builders for owner-scoped routes.
  *

@@ -7,7 +7,6 @@ import {
   resolvePDFApiKey,
   resolvePDFBaseUrl,
 } from '@/lib/server/provider-config';
-import { validateUrlForSSRF } from '@/lib/server/ssrf-guard';
 import { MINERU_CLOUD_DEFAULT_BASE } from '@/lib/pdf/constants';
 
 const log = createLogger('Verify PDF Provider');
@@ -54,14 +53,12 @@ export async function POST(req: NextRequest) {
             'AccessKey ID and AccessKey Secret are required for AliDocMind',
           );
         }
-        // Validate a client-supplied endpoint before we sign a request to it.
-        if (endpoint && process.env.NODE_ENV === 'production') {
-          const ssrfError = await validateUrlForSSRF(
-            endpoint.startsWith('http') ? endpoint : `https://${endpoint}`,
+        if (endpoint) {
+          return apiError(
+            'INVALID_URL',
+            403,
+            'Custom PDF base URLs must be configured by the server operator',
           );
-          if (ssrfError) {
-            return apiError('INVALID_URL', 403, ssrfError);
-          }
         }
       }
 
@@ -80,11 +77,12 @@ export async function POST(req: NextRequest) {
     // MinerU Cloud: verify by calling the cloud API with the token
     if (providerId === 'mineru-cloud') {
       const clientCloudBase = managed ? undefined : (baseUrl as string | undefined) || undefined;
-      if (clientCloudBase && process.env.NODE_ENV === 'production') {
-        const ssrfError = await validateUrlForSSRF(clientCloudBase);
-        if (ssrfError) {
-          return apiError('INVALID_URL', 403, ssrfError);
-        }
+      if (clientCloudBase) {
+        return apiError(
+          'INVALID_URL',
+          403,
+          'Custom PDF base URLs must be configured by the server operator',
+        );
       }
 
       const resolvedApiKey = resolvePDFApiKey(providerId, managed ? undefined : apiKey);
@@ -129,11 +127,12 @@ export async function POST(req: NextRequest) {
 
     // Self-hosted providers: verify by connecting to the base URL
     const clientBaseUrl = managed ? undefined : (baseUrl as string | undefined) || undefined;
-    if (clientBaseUrl && process.env.NODE_ENV === 'production') {
-      const ssrfError = await validateUrlForSSRF(clientBaseUrl);
-      if (ssrfError) {
-        return apiError('INVALID_URL', 403, ssrfError);
-      }
+    if (clientBaseUrl) {
+      return apiError(
+        'INVALID_URL',
+        403,
+        'Custom PDF base URLs must be configured by the server operator',
+      );
     }
 
     const resolvedBaseUrl = resolvePDFBaseUrl(providerId, clientBaseUrl);

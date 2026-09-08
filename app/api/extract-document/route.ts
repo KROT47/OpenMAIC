@@ -23,8 +23,8 @@ import {
   type ServerAssetResolution,
 } from '@/lib/persistence/resolve-server-asset';
 import { apiError, apiSuccess } from '@/lib/server/api-response';
-import { validateUrlForSSRF } from '@/lib/server/ssrf-guard';
 import { MAX_EXTRACT_DOCUMENT_FILE_SIZE_BYTES } from '@/lib/constants/generation';
+import { parseCappedFormData, UploadTooLargeError } from '@/lib/server/capped-stream';
 
 // The asset-id path resolves bytes from the server asset store, which lives in
 // the PostgreSQL persistence backend; it needs the Node runtime, not the edge.
@@ -253,13 +253,12 @@ async function runExtraction(
     // vars only. Client-entered creds are used only when unmanaged.
     const mediaManagedCreds = mediaManaged ? resolveManagedAliDocMindCredentials() : undefined;
     const mediaClientBaseUrl = mediaManaged ? undefined : requestConfig.baseUrl || undefined;
-    // Same SSRF guard the document path applies: a client-supplied endpoint
-    // must not let the server connect to internal/metadata hosts.
-    if (mediaClientBaseUrl && process.env.NODE_ENV === 'production') {
-      const ssrfError = await validateUrlForSSRF(mediaClientBaseUrl);
-      if (ssrfError) {
-        return apiError('INVALID_URL', 403, ssrfError);
-      }
+    if (mediaClientBaseUrl) {
+      return apiError(
+        'INVALID_URL',
+        403,
+        'Custom media extractor base URLs must be configured by the server operator',
+      );
     }
     const mediaArtifact = await extractMedia({
       buffer,
@@ -383,11 +382,12 @@ async function runExtraction(
       );
     }
   }
-  if (clientBaseUrl && process.env.NODE_ENV === 'production') {
-    const ssrfError = await validateUrlForSSRF(clientBaseUrl);
-    if (ssrfError) {
-      return apiError('INVALID_URL', 403, ssrfError);
-    }
+  if (clientBaseUrl) {
+    return apiError(
+      'INVALID_URL',
+      403,
+      'Custom document extractor base URLs must be configured by the server operator',
+    );
   }
 
   // For a managed AliDocMind provider, resolve server-owned AK/SK (env OR
@@ -452,7 +452,10 @@ export async function POST(req: NextRequest) {
       // Legacy byte form: the client uploads the original bytes, used by
       // browser-backed (self-deploy) pools where the server cannot resolve a
       // browser-side asset.
-      const formData = await req.formData();
+      const formData = await parseCappedFormData(
+        req,
+        MAX_EXTRACT_DOCUMENT_FILE_SIZE_BYTES + 1024 * 1024,
+      );
       const documentFile = (formData.get('file') || formData.get('pdf')) as File | null;
       requestConfig = {
         providerId: (formData.get('providerId') as string | null) ?? undefined,
@@ -633,6 +636,15 @@ export async function POST(req: NextRequest) {
 
     return await runExtraction(source, requestConfig, logState, isAssetIdForm);
   } catch (error) {
+    if (error instanceof UploadTooLargeError) {
+      return apiError(
+        'INVALID_REQUEST',
+        413,
+        `Course material file is too large. Maximum size is ${Math.floor(
+          MAX_EXTRACT_DOCUMENT_FILE_SIZE_BYTES / 1024 / 1024,
+        )}MB.`,
+      );
+    }
     log.error(
       `Document extraction failed [provider=${logState.resolvedProviderId ?? 'unknown'}, file="${sanitizeLogValue(
         logState.fileName ?? 'unknown',

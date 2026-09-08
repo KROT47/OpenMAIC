@@ -124,9 +124,7 @@ const OWNER_STAGES = [
   { id: 'stage-1', name: '光的折射', sceneCount: 12, createdAt: 1, updatedAt: 2 },
 ];
 
-const OWNER_FOLDERS = [
-  { id: 'folder-1', name: 'Math', order: 0, createdAt: 1, updatedAt: 2, userKey: 'owner' },
-];
+const OWNER_FOLDERS = [{ id: 'folder-1', name: 'Math', order: 0, createdAt: 1, updatedAt: 2 }];
 
 const NEW_FOLDER = {
   id: 'folder-9',
@@ -134,7 +132,6 @@ const NEW_FOLDER = {
   order: 1,
   createdAt: 100,
   updatedAt: 100,
-  userKey: 'owner',
 };
 
 let root: Root | null = null;

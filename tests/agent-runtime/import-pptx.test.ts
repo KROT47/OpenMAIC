@@ -15,6 +15,7 @@ import {
   MAX_IMPORT_BYTES,
   MAX_IMPORT_SLIDES,
   PARSE_PPTX_TIMEOUT_MS,
+  PPTX_ZIP_LIMITS,
   PPTX_MIME,
   parsePptxBuffer,
   parsePptxIsolated,
@@ -634,6 +635,28 @@ describe('parsePptxIsolated bounds', () => {
   it('exports a 90s parse timeout and an 8 MiB byte cap', () => {
     expect(PARSE_PPTX_TIMEOUT_MS).toBe(90_000);
     expect(MAX_IMPORT_BYTES).toBe(8 * 1024 * 1024);
+    expect(PPTX_ZIP_LIMITS).toMatchObject({
+      maxEntries: 2_000,
+      maxTotalUncompressedBytes: 128 * 1024 * 1024,
+      maxCompressionRatio: 200,
+    });
+  });
+
+  it('passes mandatory zip expansion limits into the worker', async () => {
+    let workerData: unknown;
+    class CapturingWorker {
+      terminate = vi.fn();
+      constructor(_file: string | URL, options?: { workerData?: unknown }) {
+        workerData = options?.workerData;
+      }
+      once(event: string, listener: (...args: unknown[]) => void) {
+        if (event === 'message') queueMicrotask(() => listener({ slides: [] }));
+        return this;
+      }
+    }
+
+    await parsePptxIsolated(new ArrayBuffer(8), { Worker: CapturingWorker });
+    expect(workerData).toMatchObject({ zipLimits: PPTX_ZIP_LIMITS });
   });
 
   it('rejects a hung worker when the parse timeout elapses and terminates it', async () => {

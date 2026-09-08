@@ -2,11 +2,35 @@ import { cookies } from 'next/headers';
 import { timingSafeEqual } from 'crypto';
 import { apiError, apiSuccess } from '@/lib/server/api-response';
 import { createAccessToken } from '@/lib/server/access-token';
+import {
+  ACCESS_TOKEN_MAX_AGE_SECONDS,
+  getAccessCodeConfigurationError,
+} from '@/lib/access-token-policy';
+import {
+  resolveAccessCodeRateLimitKeys,
+  takeAccessCodeAttempt,
+} from '@/lib/server/access-code-rate-limit';
 
 export async function POST(request: Request) {
   const accessCode = process.env.ACCESS_CODE;
   if (!accessCode) {
     return apiSuccess({ valid: true });
+  }
+  const configurationError = getAccessCodeConfigurationError(accessCode);
+  if (configurationError) {
+    return apiError('INVALID_CONFIGURATION', 503, configurationError);
+  }
+
+  let attempt;
+  try {
+    attempt = await takeAccessCodeAttempt(resolveAccessCodeRateLimitKeys(request, accessCode));
+  } catch {
+    return apiError('INTERNAL_ERROR', 503, 'Access-code verification is unavailable');
+  }
+  if (!attempt.allowed) {
+    const response = apiError('RATE_LIMITED', 429, 'Too many access-code attempts');
+    response.headers.set('Retry-After', String(attempt.retryAfterSeconds));
+    return response;
   }
 
   let body: { code?: string };
@@ -33,7 +57,7 @@ export async function POST(request: Request) {
     httpOnly: true,
     sameSite: 'lax',
     path: '/',
-    maxAge: 60 * 60 * 24 * 7, // 7 days
+    maxAge: ACCESS_TOKEN_MAX_AGE_SECONDS,
     secure: process.env.NODE_ENV === 'production',
   });
 

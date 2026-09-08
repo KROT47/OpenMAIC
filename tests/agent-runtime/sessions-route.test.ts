@@ -102,6 +102,7 @@ describe('agent session collection route', () => {
         origin: 'http://localhost',
       }),
     );
+    await expect(response.json()).resolves.not.toHaveProperty('ownerId');
   });
 
   it('accepts a skill by its user-visible name and freezes the durable id, like the runner', async () => {
@@ -254,7 +255,9 @@ describe('agent session collection route', () => {
   });
 
   it('lists only sessions for the resolved owner', async () => {
-    mocks.listSessionsByOwner.mockResolvedValue([{ id: 'session-1', status: 'running' }]);
+    mocks.listSessionsByOwner.mockResolvedValue([
+      { id: 'session-1', ownerId: 'anon:test', status: 'running' },
+    ]);
     const response = await GET(new NextRequest('http://localhost/api/agent/sessions'));
 
     expect(response.status).toBe(200);

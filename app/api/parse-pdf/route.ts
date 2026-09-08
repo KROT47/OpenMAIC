@@ -10,7 +10,12 @@ import { documentArtifactToParsedPdfContent, extractDocument } from '@/lib/docum
 import { createLogger } from '@/lib/logger';
 import { apiError, apiSuccess } from '@/lib/server/api-response';
 import { validateUrlForSSRF } from '@/lib/server/ssrf-guard';
+import { parseCappedFormData, UploadTooLargeError } from '@/lib/server/capped-stream';
+import { MAX_EXTRACT_DOCUMENT_FILE_SIZE_BYTES } from '@/lib/constants/generation';
+import { createStrictFetchTransport } from '@/lib/server/strict-fetch';
 const log = createLogger('Parse PDF');
+
+const MAX_PDF_MULTIPART_BYTES = MAX_EXTRACT_DOCUMENT_FILE_SIZE_BYTES + 1024 * 1024;
 
 export async function POST(req: NextRequest) {
   let pdfFileName: string | undefined;
@@ -26,7 +31,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const formData = await req.formData();
+    const formData = await parseCappedFormData(req, MAX_PDF_MULTIPART_BYTES);
     const pdfFile = formData.get('pdf') as File | null;
     const providerId = formData.get('providerId') as PDFProviderId | null;
     const apiKey = formData.get('apiKey') as string | null;
@@ -51,10 +56,12 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    const transport = clientBaseUrl ? createStrictFetchTransport() : undefined;
     const config = {
       providerId: effectiveProviderId,
       apiKey: resolvePDFApiKey(effectiveProviderId, managed ? undefined : apiKey || undefined),
       baseUrl: resolvePDFBaseUrl(effectiveProviderId, clientBaseUrl),
+      fetchImpl: transport?.fetch as typeof fetch | undefined,
     };
 
     // Convert PDF to buffer
@@ -62,13 +69,18 @@ export async function POST(req: NextRequest) {
     const buffer = Buffer.from(arrayBuffer);
 
     // Route the existing PDF API through the document extraction boundary.
-    const artifact = await extractDocument({
-      buffer,
-      fileName: pdfFile.name,
-      fileSize: pdfFile.size,
-      mimeType: 'application/pdf',
-      config,
-    });
+    let artifact;
+    try {
+      artifact = await extractDocument({
+        buffer,
+        fileName: pdfFile.name,
+        fileSize: pdfFile.size,
+        mimeType: 'application/pdf',
+        config,
+      });
+    } finally {
+      await transport?.close().catch(() => undefined);
+    }
     const result = documentArtifactToParsedPdfContent(artifact);
 
     // Add file metadata
@@ -84,6 +96,9 @@ export async function POST(req: NextRequest) {
 
     return apiSuccess({ data: resultWithMetadata });
   } catch (error) {
+    if (error instanceof UploadTooLargeError) {
+      return apiError('INVALID_REQUEST', 413, 'PDF upload is too large');
+    }
     log.error(
       `PDF parsing failed [provider=${resolvedProviderId ?? 'unknown'}, file="${pdfFileName ?? 'unknown'}"]:`,
       error,

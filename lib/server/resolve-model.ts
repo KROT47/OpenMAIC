@@ -14,7 +14,6 @@ import {
   resolveBaseUrl,
   resolveProxy,
 } from '@/lib/server/provider-config';
-import { validateUrlForSSRF } from '@/lib/server/ssrf-guard';
 import { getStageRoute, type LlmStage } from '@/lib/server/model-routes';
 import type { ModelLogicalSession } from '@/lib/server/model-logical-session';
 import { resolveServerModelAdapter } from '@/lib/server/providers/model-adapters';
@@ -163,11 +162,8 @@ export async function resolveModel(params: {
     throw new Error('Amazon Bedrock must be enabled by the server operator before it can be used.');
   }
   const clientBaseUrl = managed ? undefined : clientBaseUrlParam || undefined;
-  if (clientBaseUrl && process.env.NODE_ENV === 'production') {
-    const ssrfError = await validateUrlForSSRF(clientBaseUrl);
-    if (ssrfError) {
-      throw new Error(ssrfError);
-    }
+  if (clientBaseUrl) {
+    throw new Error('Custom model base URLs must be configured by the server operator');
   }
 
   const apiKey = resolveApiKey(providerId, clientApiKey || '');

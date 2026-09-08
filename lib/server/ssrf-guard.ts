@@ -52,7 +52,10 @@ export function assertSafeIp(value: string): void {
 }
 
 /** Strict URL-layer validation for outbound material fetches (no DNS side effects). */
-export function normalizeUrlForStrictFetch(value: string): URL {
+export function normalizeUrlForStrictFetch(
+  value: string,
+  options: { allowLocalNetworks?: boolean; allowNonStandardPorts?: boolean } = {},
+): URL {
   let parsed: URL;
   try {
     // WHATWG parsing canonicalizes legacy decimal/octal IPv4 spellings before checks.
@@ -66,19 +69,25 @@ export function normalizeUrlForStrictFetch(value: string): URL {
   if (parsed.username || parsed.password) {
     throw new UnsafeNetworkTargetError('URLs containing userinfo are not allowed');
   }
-  if (parsed.port && parsed.port !== '80' && parsed.port !== '443') {
+  if (
+    !options.allowNonStandardPorts &&
+    parsed.port &&
+    parsed.port !== '80' &&
+    parsed.port !== '443'
+  ) {
     throw new UnsafeNetworkTargetError('Only ports 80 and 443 are allowed');
   }
   const hostname = normalizeAddress(parsed.hostname);
   if (
-    CLOUD_METADATA_HOSTNAMES.has(hostname) ||
-    hostname === 'localhost' ||
-    hostname.endsWith('.local')
+    !options.allowLocalNetworks &&
+    (CLOUD_METADATA_HOSTNAMES.has(hostname) ||
+      hostname === 'localhost' ||
+      hostname.endsWith('.local'))
   ) {
     throw new UnsafeNetworkTargetError('Local/private/reserved network URLs are not allowed');
   }
   // IP literals never invoke lookup in Node/undici, so this branch is mandatory.
-  if (isIP(hostname)) assertSafeIp(hostname);
+  if (!options.allowLocalNetworks && isIP(hostname)) assertSafeIp(hostname);
   return parsed;
 }
 
@@ -189,6 +198,7 @@ export function isPrivateIP(ip: string): boolean {
       first === 0 ||
       first === 10 ||
       first === 127 ||
+      (first === 100 && second >= 64 && second <= 127) ||
       (first === 169 && second === 254) ||
       (first === 172 && second >= 16 && second <= 31) ||
       (first === 192 && second === 168) ||

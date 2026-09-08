@@ -29,7 +29,7 @@ export async function parse(buffer: ArrayBuffer, options?: ParseOptions): Promis
 
 export { parseZip, buildPresentation, toPptxtojsonFormat };
 export type { Output, Slide, Element } from './adapter/types';
-export type { PptxFiles } from './parser/ZipParser';
+export type { PptxFiles, ZipParseLimits } from './parser/ZipParser';
 export type { PresentationData } from './model/Presentation';
 export type { MediaMode } from './serializer/RenderContext';
 

@@ -285,12 +285,15 @@ pnpm build && pnpm start
 
 ### Optional: ACCESS_CODE (Shared Deployments)
 
-To protect your deployment with a site-level password, set `ACCESS_CODE` in `.env.local`:
+To protect your deployment, generate a high-entropy `ACCESS_CODE` and set it in `.env.local`:
 
-```env
-ACCESS_CODE=your-secret-code
+```bash
+node -e "console.log('ACCESS_CODE=omc_'+require('node:crypto').randomBytes(32).toString('base64url'))"
+DATABASE_URL=postgres://...
+ACCESS_CODE_TRUSTED_IP_HEADER=x-real-ip
 ```
 
+Copy the generated line into `.env.local`. Set the IP header to one overwritten by your trusted reverse proxy; PostgreSQL shares attempt limits across instances. The database role must be able to create the limiter table on first startup. Human-selected and legacy access codes are rejected.
 When set, visitors see a password prompt before accessing the app. All API routes are also protected. If not set, the app works as before.
 
 ### Vercel Deployment

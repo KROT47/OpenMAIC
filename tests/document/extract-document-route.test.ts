@@ -47,6 +47,10 @@ async function postExtractDocument(input: {
 
   const request = new Request('http://localhost/api/extract-document', {
     method: 'POST',
+    headers:
+      input.file.size > 50 * 1024 * 1024
+        ? { 'content-length': String(input.file.size + 1024) }
+        : undefined,
     body: formData,
   });
   return POST(request as unknown as NextRequest);
@@ -468,9 +472,7 @@ describe('POST /api/extract-document (asset-id form)', () => {
     expect(mocks.resolveServerAsset).not.toHaveBeenCalled();
   });
 
-  it('applies the SSRF guard to the JSON path baseUrl in production mode', async () => {
-    vi.stubEnv('NODE_ENV', 'production');
-    vi.stubEnv('ALLOW_LOCAL_NETWORKS', 'false');
+  it('rejects a client document-extractor baseUrl', async () => {
     mocks.resolveServerAsset.mockResolvedValue({
       status: 'resolved',
       buffer: Buffer.from('%PDF-1.4'),

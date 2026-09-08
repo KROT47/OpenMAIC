@@ -7,6 +7,7 @@ import { apiError } from '@/lib/server/api-response';
 import { getAgentSessionStore } from '@/lib/server/agent-runtime/store';
 import { withRequestOwnerId } from '@/lib/server/agent-runtime/with-owner';
 import { normalizeSessionTitleOverride } from '@/lib/workbench/session-title';
+import { publicOwnerRecord } from '@/lib/server/agent-runtime/route-response';
 
 export const runtime = 'nodejs';
 
@@ -22,7 +23,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     if (!meta || meta.ownerId !== ownerId) {
       return new Response('Not found', { status: 404, headers: responseHeaders });
     }
-    return NextResponse.json(meta, { headers: responseHeaders });
+    return NextResponse.json(publicOwnerRecord(meta), { headers: responseHeaders });
   });
 }
 

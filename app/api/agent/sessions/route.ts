@@ -19,6 +19,7 @@ import {
 import { withRequestOwnerId } from '@/lib/server/agent-runtime/with-owner';
 import { buildRequestOrigin, isValidClassroomId } from '@/lib/server/classroom-storage';
 import { decodeCourseRefs } from '@/lib/workbench/course-refs';
+import { publicOwnerRecord } from '@/lib/server/agent-runtime/route-response';
 
 export const runtime = 'nodejs';
 
@@ -149,7 +150,10 @@ export async function POST(req: NextRequest) {
     });
 
     if (!hasOpeningContext) {
-      return NextResponse.json(meta, { status: 202, headers: responseHeaders });
+      return NextResponse.json(publicOwnerRecord(meta), {
+        status: 202,
+        headers: responseHeaders,
+      });
     }
 
     try {
@@ -167,7 +171,7 @@ export async function POST(req: NextRequest) {
       );
       return NextResponse.json(
         {
-          ...meta,
+          ...publicOwnerRecord(meta),
           status: 'queued',
           ...(decodedCourseRefs.refs.length ? { courseRefs: decodedCourseRefs.refs } : {}),
         },
@@ -191,6 +195,6 @@ export async function GET(req: NextRequest) {
   return withRequestOwnerId(req, async (ownerId, responseHeaders) => {
     const store = await getAgentSessionStore();
     const sessions = await store.listSessionsByOwner(ownerId);
-    return NextResponse.json(sessions, { headers: responseHeaders });
+    return NextResponse.json(sessions.map(publicOwnerRecord), { headers: responseHeaders });
   });
 }

@@ -52,7 +52,7 @@ services:
       - ./server-providers.yml:/app/server-providers.yml:ro
 ```
 
-В Docker контейнере `localhost` указывает на сам контейнер. Если Ollama, Lemonade, VoxCPM или ComfyUI запущены на хосте, используйте `host.docker.internal`, например `http://host.docker.internal:11434/v1` или `http://host.docker.internal:8188`. В Linux обычно также нужно добавить `extra_hosts: ["host.docker.internal:host-gateway"]` для сервиса `openmaic`. ComfyUI пока не является серверным провайдером, поэтому в продакшене нужно задать `ALLOW_LOCAL_NETWORKS=true`, иначе SSRF-защита отклонит запросы к этому адресу.
+В Docker контейнере `localhost` указывает на сам контейнер. Если Ollama, Lemonade, VoxCPM или ComfyUI запущены на хосте, используйте `host.docker.internal`, например `http://host.docker.internal:11434/v1` или `http://host.docker.internal:8188`. В Linux обычно также нужно добавить `extra_hosts: ["host.docker.internal:host-gateway"]` для сервиса `openmaic`. Приватные endpoint-ы провайдеров настраивайте на сервере, например через `IMAGE_COMFYUI_BASE_URL`; приватные URL от клиента отклоняются. Устанавливайте `ALLOW_LOCAL_NETWORKS=true` только если настроенный оператором автономный медиапровайдер возвращает URL созданных файлов во внутренней сети.
 
 ## Самостоятельный хостинг на виртуальной машине
 

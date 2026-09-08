@@ -110,6 +110,8 @@ export interface ImageProviderConfig {
   credentialMode?: 'api-key' | 'oauth' | 'none';
   /** Default API base URL (can be overridden in user settings) */
   defaultBaseUrl?: string;
+  /** Built-in endpoint may be used only when the provider is configured server-side. */
+  trustedDefaultBaseUrlOnly?: boolean;
   /** Path to provider icon asset */
   icon?: string;
   /** Available models for this provider */
@@ -140,6 +142,8 @@ export interface ImageGenerationConfig {
   baseUrl?: string;
   /** Optional model ID override (uses provider default if omitted) */
   model?: string;
+  /** Server-only transport seam for caller-controlled provider URLs. */
+  fetchImpl?: (input: string | URL, init?: RequestInit) => Promise<Response>;
 }
 
 /**
@@ -252,6 +256,8 @@ export interface VideoGenerationConfig {
   baseUrl?: string;
   /** Optional model ID override (uses provider default if omitted) */
   model?: string;
+  /** Server-only transport seam for caller-controlled provider URLs. */
+  fetchImpl?: (input: string | URL, init?: RequestInit) => Promise<Response>;
 }
 
 /**

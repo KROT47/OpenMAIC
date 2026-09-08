@@ -48,14 +48,12 @@ describe('GET /api/folders', () => {
     expect(response.status).toBe(404);
   });
 
-  it('lists the caller’s folders with their owner key', async () => {
+  it('lists the caller’s folders without disclosing the owner credential', async () => {
     await mocks.fakeStore!.store.createFolder('folder-a', 'Math');
     const response = await GET(routeRequest('http://localhost/api/folders'));
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({
-      folders: [
-        expect.objectContaining({ id: 'folder-a', name: 'Math', order: 0, userKey: 'owner-1' }),
-      ],
+      folders: [expect.not.objectContaining({ userKey: expect.anything() })],
     });
   });
 });
@@ -75,7 +73,7 @@ describe('POST /api/folders', () => {
     const response = await post({ name: '  数学  ' });
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({
-      folder: { name: '数学', userKey: 'owner-1' },
+      folder: { name: '数学' },
     });
     await expect(mocks.fakeStore!.store.listFolders()).resolves.toEqual([
       expect.objectContaining({ name: '数学' }),

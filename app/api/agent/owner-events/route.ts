@@ -8,6 +8,7 @@
  * that identity.
  */
 import type { PersistedOwnerSessionEvent } from '@openmaic/storage';
+import { publicOwnerRecord } from '@/lib/server/agent-runtime/route-response';
 import type { NextRequest } from 'next/server';
 
 import { isAgentRuntimeConfigured } from '@/lib/config/feature-flags';
@@ -166,7 +167,7 @@ export async function GET(req: NextRequest) {
           if (
             !write(
               `id: ${event.id}\nevent: ${event.type}\ndata: ${JSON.stringify({
-                ...event,
+                ...publicOwnerRecord(event),
                 // A degraded catch-up set `backlogDone` without draining, so
                 // the events that arrive while recovering are still history:
                 // keep labelling them backlog until the real signal goes out.
@@ -285,7 +286,6 @@ export async function GET(req: NextRequest) {
             write(
               `event: owner_moved\ndata: ${JSON.stringify({
                 type: 'owner_moved',
-                newOwnerId,
                 action: 'reconnect',
               })}\n\n`,
             );

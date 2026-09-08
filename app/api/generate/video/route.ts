@@ -31,6 +31,7 @@ import type { VideoProviderId, VideoGenerationOptions } from '@/lib/media/types'
 import { createLogger } from '@/lib/logger';
 import { apiError, apiSuccess } from '@/lib/server/api-response';
 import { validateUrlForSSRF } from '@/lib/server/ssrf-guard';
+import { createStrictFetchTransport } from '@/lib/server/strict-fetch';
 
 const log = createLogger('VideoGeneration API');
 
@@ -102,7 +103,16 @@ export async function POST(request: NextRequest) {
         `aspect=${options.aspectRatio ?? 'auto'}, resolution=${options.resolution ?? 'auto'}`,
     );
 
-    const result = await generateVideo({ providerId, apiKey, baseUrl, model }, options);
+    const transport = clientBaseUrl ? createStrictFetchTransport() : undefined;
+    let result;
+    try {
+      result = await generateVideo(
+        { providerId, apiKey, baseUrl, model, fetchImpl: transport?.fetch },
+        options,
+      );
+    } finally {
+      await transport?.close().catch(() => undefined);
+    }
 
     log.info(
       `Video generated: url=${result.url ? 'yes' : 'no'}, ${result.width}x${result.height}, ${result.duration}s`,
