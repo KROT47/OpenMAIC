@@ -109,7 +109,7 @@ pnpm install
 cp .env.example .env.local
 ```
 
-至少填写一个 LLM 服务商的 API Key：
+使用 API Key 的服务商时，至少填写一个 LLM 服务商的 API Key。如果使用 ChatGPT/Codex 订阅，可跳过 API Key 配置，按下方的 [Codex 订阅快速开始](#codex-subscription)操作。
 
 ```env
 OPENAI_API_KEY=sk-...
@@ -258,6 +258,24 @@ pnpm dev
 
 打开 **http://localhost:3000** 开始学习！
 
+<a id="codex-subscription"></a>
+
+### 另一种方式：ChatGPT/Codex 订阅（本地）
+
+实验性的 Codex 服务商使用你的 ChatGPT 方案额度。标准的本地浏览器使用流程无需 LLM API Key、`DEFAULT_MODEL` 或 PostgreSQL。
+
+1. 按第 1 步执行 `pnpm install`，然后运行 `pnpm dev`，打开 **http://localhost:3000**。`.env.local` 中的 LLM API Key 可以留空。
+2. 打开 **设置 → 语言模型 → Codex**，点击 **使用 ChatGPT 登录**，在弹窗中完成授权。浏览器登录要求 OpenMAIC 所在机器的端口 `1455` 可用。
+3. 也可以点击 **使用设备代码**，打开显示的验证页面并输入一次性代码。保持设置页面打开，等待授权完成。Docker/VPS 或浏览器与服务不在同一机器时，请使用此方式。
+4. 出现 **已连接 ChatGPT**（或账户邮箱）后，OpenMAIC 会加载可用模型并选中第一个；也可改选其他可用的 Codex 模型。
+5. 点击 **测试连接**，然后返回首页生成一个简短课程。
+
+仅支持单用户、单个 Node 进程，以及持久化且可写的 `data/` 目录（包括 `data/auth/`；Docker 中为 `/app/data`）。不支持 Vercel 等 serverless 部署。生产环境还必须按 [ACCESS_CODE 配置](#可选access_code共享部署)设置访问保护。
+
+TTS、ASR 和视频服务商需单独配置；Pro 工作台也需要[单独设置](README.md#optional-agent-workbench-and-runtime)。
+
+存储、登录、模型可用性和故障排查详情见[完整 OAuth 指南](CODEX_OAUTH_SETUP.md#requirements-and-environment)（英文）。
+
 ### 4. 生产环境构建
 
 ```bash
@@ -327,8 +345,6 @@ docker build \
 `node:22-alpine` 基础镜像。若这些步骤较慢，需要单独配置 Docker daemon 的
 registry mirror。同一个 BuildKit builder 会在常规缓存清理前跨构建复用 pnpm
 store；缓存只用于提升性能，不是正确完成构建的必要条件。
-实验性的 ChatGPT/Codex 订阅登录只支持带持久化存储的单用户、单进程自托管实例，不支持
-上面的 Vercel 部署。
 
 ### 可选：MinerU（增强文档解析）
 

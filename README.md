@@ -122,7 +122,7 @@ pnpm install
 cp .env.example .env.local
 ```
 
-Fill in at least one LLM provider key:
+For API-key providers, fill in at least one LLM provider key. If you use a ChatGPT/Codex subscription, skip the API-key configuration and follow the [Codex subscription quick start](#codex-subscription) below.
 
 ```env
 OPENAI_API_KEY=sk-...
@@ -276,6 +276,24 @@ pnpm dev
 ```
 
 Open **http://localhost:3000** and start learning!
+
+<a id="codex-subscription"></a>
+
+### Alternative: ChatGPT/Codex Subscription (Local)
+
+The experimental Codex provider uses your ChatGPT plan quota. For the standard local browser workflow, no LLM API key, `DEFAULT_MODEL`, or PostgreSQL is required.
+
+1. Install dependencies with `pnpm install` (step 1), run `pnpm dev`, and open **http://localhost:3000**. You can leave the LLM API-key fields in `.env.local` empty.
+2. Open **Settings → LLM → Codex** and click **Sign in with ChatGPT**. Complete authorization in the popup. Browser sign-in requires a free port `1455` on the same machine as OpenMAIC.
+3. Alternatively, click **Use device code**, open the displayed verification page, and enter the one-time code. Keep Settings open until authorization finishes. Use this method for Docker/VPS or when your browser runs on another machine.
+4. Wait for **Connected with ChatGPT** (or your account email). OpenMAIC loads the available models and selects the first one; choose another available Codex model if desired.
+5. Click **Test connection**, then return to the home page and generate a short lesson.
+
+Use one user and one Node process with a persistent, writable `data/` directory (including `data/auth/`; `/app/data` in Docker). Serverless deployments, including Vercel, are unsupported. Production also requires [ACCESS_CODE setup](#optional-access_code-shared-deployments).
+
+TTS, ASR, and video providers are configured separately. The [Pro workbench](#optional-agent-workbench-and-runtime) also requires its own setup.
+
+See [the detailed OAuth guide](CODEX_OAUTH_SETUP.md#requirements-and-environment) for storage, sign-in, model availability, and troubleshooting details.
 
 ### 4. Build for Production
 
@@ -478,8 +496,6 @@ docker compose --profile video-export up --build
 ```
 
 The app auto-detects the service via `RENDER_SERVICE_URL` (preset in `docker-compose.yml`) and enables one-click MP4 rendering. Without the profile — or when `RENDER_SERVICE_URL` is unset — export degrades to downloading the project ZIP for local CLI rendering. See [`render-service/README.md`](render-service/README.md) for standalone setup and tuning (`RENDER_MAX_CONCURRENCY`, etc.).
-Experimental ChatGPT/Codex subscription sign-in is supported only on a single-user, single-process
-self-hosted instance with persistent storage; it is not supported by the Vercel deployment above.
 
 ### Optional: MinerU (Advanced Document Parsing)
 
