@@ -124,11 +124,11 @@ export async function POST(req: NextRequest) {
 
     let aiCall: AICallFn | undefined;
     try {
-      const { model: languageModel, thinkingConfig } = await resolveModelFromRequest(
-        req,
-        body,
-        'web-search-query-rewrite',
-      );
+      const {
+        model: languageModel,
+        thinkingConfig,
+        serverManaged,
+      } = await resolveModelFromRequest(req, body, 'web-search-query-rewrite');
       aiCall = async (systemPrompt, userPrompt) => {
         const result = await callLLM(
           {
@@ -142,6 +142,7 @@ export async function POST(req: NextRequest) {
           'web-search-query-rewrite',
           undefined,
           thinkingConfig,
+          { serverManaged },
         );
         return result.text;
       };
@@ -195,6 +196,8 @@ function getMissingBaseUrlMessage(providerId: WebSearchProviderId, providerName:
 
 function getWebSearchEnvKey(providerId: WebSearchProviderId): string {
   switch (providerId) {
+    case 'exa':
+      return 'EXA_API_KEY';
     case 'baidu':
       return 'BAIDU_API_KEY';
     case 'bocha':

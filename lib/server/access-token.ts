@@ -5,6 +5,8 @@ import {
   isAccessTokenTimestampValid,
 } from '@/lib/access-token-policy';
 
+import { isAccessTokenSignatureFormatValid } from './access-token-shared';
+
 /** Create an HMAC-signed token: `timestamp.signature` */
 export function createAccessToken(accessCode: string): string {
   if (!isAccessCodeSecurelyGenerated(accessCode)) {
@@ -24,6 +26,9 @@ export function verifyAccessToken(token: string, accessCode: string, now = Date.
   const timestamp = token.substring(0, dotIndex);
   const signature = token.substring(dotIndex + 1);
   if (!isAccessTokenTimestampValid(timestamp, now)) return false;
+
+  // Reject non-canonical signatures so this verifier agrees with the Edge one.
+  if (!isAccessTokenSignatureFormatValid(signature)) return false;
 
   const expected = createHmac('sha256', accessCode).update(timestamp).digest('hex');
 

@@ -7,7 +7,7 @@ OpenMAIC は自分のマシンで動かせる Next.js アプリケーション�
 
 ## 前提条件
 
-- **Node.js** 20.9.0 以上
+- **Node.js** 22.19.0 以上
 - **pnpm** 10.28.0（未インストールの場合は `npm install -g pnpm@10.28.0`）
 - 少なくとも 1 つの LLM プロバイダーを設定。クラウドのプロバイダーは通常 API key が必要、ローカルの Ollama や Lemonade は API key 不要
 
@@ -45,6 +45,16 @@ OLLAMA_BASE_URL=http://localhost:11434/v1
 
 ## 実行
 
+授業は PostgreSQL に保存され、`DATABASE_URL` がないとサーバーは起動を拒否します。まずローカル開発用データベース（Docker 上の独立した PostgreSQL、`127.0.0.1:5432`、このマシン上のすべてのチェックアウトで共有。別のポートは `OPENMAIC_DB_PORT` で指定）を起動し、`.env.local` に `DATABASE_URL` を設定します：
+
+```bash
+pnpm db:up
+```
+
+```bash title=".env.local"
+DATABASE_URL=postgres://openmaic:openmaic-dev@127.0.0.1:5432/openmaic
+```
+
 開発サーバーを起動します。
 
 ```bash
@@ -57,7 +67,7 @@ pnpm dev
 
 ```bash
 pnpm build
-pnpm start
+DATABASE_URL=postgres://... pnpm start
 ```
 
 または Vercel、Docker、自分のサーバーにデプロイ可能です。詳しくは[デプロイガイド](./deployment.mdx)を参照してください。

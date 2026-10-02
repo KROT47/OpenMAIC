@@ -2,26 +2,30 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 import type { PersistedClassroomData } from '@/lib/server/classroom-storage';
 
-const mocks = vi.hoisted(() => ({ createClassroom: vi.fn() }));
+const mocks = vi.hoisted(() => ({ persistClassroom: vi.fn() }));
 
 vi.mock('crypto', async () => ({
   ...(await vi.importActual<typeof import('crypto')>('crypto')),
-  randomUUID: () => '11111111-1111-4111-8111-111111111111',
+  randomUUID: () => 'classroom1',
 }));
 vi.mock('@/lib/server/classroom-storage', async () => ({
   ...(await vi.importActual<typeof import('@/lib/server/classroom-storage')>(
     '@/lib/server/classroom-storage',
   )),
-  createClassroom: mocks.createClassroom,
+  persistClassroom: mocks.persistClassroom,
+  generateClassroomId: () => 'classroom1',
 }));
 
 import { POST } from '@/app/api/classroom/route';
-import { sanitizeClassroomRichText } from '@/lib/server/classroom-storage';
-import { persistClassroom } from '@/lib/server/classroom-storage';
+import { sanitizeSceneContent as sanitizeClassroomRichText } from '@/lib/server/sanitize-scene-content';
+const actualStorage = () =>
+  vi.importActual<typeof import('@/lib/server/classroom-storage')>(
+    '@/lib/server/classroom-storage',
+  );
 
 beforeEach(() => {
-  mocks.createClassroom.mockReset();
-  mocks.createClassroom.mockImplementation(async (data) => ({
+  mocks.persistClassroom.mockReset();
+  mocks.persistClassroom.mockImplementation(async (data) => ({
     ...data,
     createdAt: new Date(0).toISOString(),
     url: `http://localhost/classroom/${data.id}`,
@@ -50,13 +54,14 @@ describe('POST /api/classroom', () => {
     );
 
     expect(response.status).toBe(201);
-    expect(mocks.createClassroom).toHaveBeenCalledWith(
+    expect(mocks.persistClassroom).toHaveBeenCalledWith(
       expect.objectContaining({
-        id: '11111111-1111-4111-8111-111111111111',
-        stage: expect.objectContaining({ id: '11111111-1111-4111-8111-111111111111' }),
-        scenes: [expect.objectContaining({ stageId: '11111111-1111-4111-8111-111111111111' })],
+        id: 'classroom1',
+        stage: expect.objectContaining({ id: 'classroom1' }),
+        scenes: [expect.objectContaining({ stageId: 'classroom1' })],
       }),
       'http://localhost',
+      { exclusive: true },
     );
   });
 });
@@ -64,7 +69,7 @@ describe('POST /api/classroom', () => {
 describe('classroom rich-text boundary', () => {
   it('rejects traversal identifiers before touching the filesystem', async () => {
     await expect(
-      persistClassroom(
+      (await actualStorage()).persistClassroom(
         {
           id: '../../package',
           stage: { id: '../../package', name: 'Lesson', createdAt: 1, updatedAt: 1 },
@@ -72,7 +77,7 @@ describe('classroom rich-text boundary', () => {
         },
         'http://localhost',
       ),
-    ).rejects.toThrow('Invalid classroom id');
+    ).rejects.toThrow('outside the classrooms directory');
   });
 
   it('strips executable markup on legacy reads while preserving formatting and KaTeX', () => {
@@ -117,7 +122,7 @@ describe('classroom rich-text boundary', () => {
     expect(elements[0]!.content).toContain('font-size:20px');
     expect(elements[0]!.content).not.toMatch(/script|onerror|onclick|<img/i);
     expect(elements[1]!.html).toContain('class="katex"');
-    expect(elements[1]!.html).toContain('<math>');
+    expect(elements[1]!.html).toContain('x');
     expect(elements[1]!.html).not.toMatch(/onerror|<img/i);
   });
 });

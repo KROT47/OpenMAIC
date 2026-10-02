@@ -14,7 +14,7 @@ import {
   type StageSceneLoadToken,
 } from '@/lib/store/stage';
 import { resolveStageFallbackAccess } from '@/lib/classroom/stage-ownership-signal';
-import type { MediaFileRecord } from '@/lib/utils/database';
+import type { MediaFileRecord } from '@/lib/device-storage/database';
 import { unmarkStageDeleted } from '@/lib/utils/deleted-stages';
 import type { GeneratedAgentConfig, Scene, Stage } from '@/lib/types/stage';
 import type { DocumentMigrationDeps } from '@/lib/document-store/migration';
@@ -33,6 +33,32 @@ export interface ClassroomPayload {
   stage: Stage;
   scenes: Scene[];
 }
+
+/**
+ * What `/api/classroom` had to say. This uses the same three-way vocabulary as
+ * stage-meta, with endpoint-specific HTTP classification. Callers must not
+ * collapse `'unavailable'` into absence: an HTTP rejection or transport
+ * failure is not proof the course does not exist (#1450).
+ */
+export type ClassroomFetchResult =
+  | { outcome: 'found'; classroom: ClassroomPayload }
+  | { outcome: 'absent' }
+  | { outcome: 'unavailable'; status?: number };
+
+/**
+ * What a classroom load concluded about the document itself.
+ *
+ * `'ready'` means this course is in the store (local and/or server).
+ * `'absent'` is a positive miss (404/410 or an empty success body).
+ * `'unavailable'` means no usable classroom was returned. It stays on the
+ * retryable error path and never becomes "not found".
+ */
+export type ClassroomLoadResult =
+  | { outcome: 'ready' }
+  | { outcome: 'absent' }
+  | { outcome: 'unavailable' }
+  | { outcome: 'failed' }
+  | { outcome: 'cancelled' };
 
 interface Logger {
   info: (...args: unknown[]) => void;
@@ -62,7 +88,7 @@ export interface RunClassroomLoadArgs<TMediaTasks = unknown> {
   fetchClassroom: (
     classroomId: string,
     shouldConvert?: () => boolean,
-  ) => Promise<ClassroomPayload | null>;
+  ) => Promise<ClassroomFetchResult>;
   applyFallbackScenes: (args: {
     loadToken: StageSceneLoadToken;
     stage: Stage;
@@ -128,10 +154,10 @@ export async function runClassroomLoad<TMediaTasks = unknown>({
   setError,
   setLoading,
   log,
-}: RunClassroomLoadArgs<TMediaTasks>): Promise<void> {
+}: RunClassroomLoadArgs<TMediaTasks>): Promise<ClassroomLoadResult> {
   try {
     await loadFromStorage(classroomId, loadToken);
-    if (!isCurrent()) return;
+    if (!isCurrent()) return { outcome: 'cancelled' };
 
     if (!getCurrentStage()) {
       log.info('No IndexedDB data, trying server-side storage for:', classroomId);
@@ -139,32 +165,42 @@ export async function runClassroomLoad<TMediaTasks = unknown>({
       // Once it returns, the document owns every allocation; a later
       // navigation may discard only this in-memory apply, never the durable
       // assets -- so nothing here rolls allocations back.
-      const classroom = await fetchClassroom(classroomId, isCurrent);
-      if (!isCurrent()) return;
+      const fetchResult = await fetchClassroom(classroomId, isCurrent);
+      if (!isCurrent()) return { outcome: 'cancelled' };
 
-      if (classroom) {
-        const { stage, scenes } = classroom;
+      if (fetchResult.outcome === 'unavailable') {
+        // Do not continue into media/roster hydration or let the surface treat
+        // this as not-found: we never got a positive answer about the course.
+        return { outcome: 'unavailable' };
+      }
+
+      if (fetchResult.outcome === 'found') {
+        const { stage, scenes } = fetchResult.classroom;
         const applied = await applyFallbackScenes({ loadToken, stage, scenes });
-        if (!isCurrent()) return;
+        if (!isCurrent()) return { outcome: 'cancelled' };
         if (!applied) {
           log.info('Stage changed during server-side fallback hydration, skipping load:', {
             requestedStageId: stage.id,
             latestStageId: getCurrentStage()?.id,
           });
-          return;
+          return { outcome: 'cancelled' };
         }
         log.info('Loaded from server-side storage:', classroomId);
+      } else {
+        // Positive absence from the server (and nothing local). Stop before
+        // inventing a loaded empty classroom.
+        return { outcome: 'absent' };
       }
     }
 
-    if (!isCurrent()) return;
+    if (!isCurrent()) return { outcome: 'cancelled' };
     // Metadata-only on the critical path: the default loader defers object-URL
     // creation for non-priority blobs, so this await is a table read, not a
     // full media hydration (the rest hydrates in the background after apply).
     const mediaTasks = await loadRestoredMediaTasks(classroomId);
     if (!isCurrent()) {
       discardRestoredMediaTasks(mediaTasks);
-      return;
+      return { outcome: 'cancelled' };
     }
     applyRestoredMediaTasks(mediaTasks);
 
@@ -179,7 +215,7 @@ export async function runClassroomLoad<TMediaTasks = unknown>({
     // mirror is not re-queried on every load of a classroom that has nothing
     // to migrate. A FAILED mirror read is neither merged nor remembered — the
     // next load retries the probe.
-    if (!isCurrent()) return;
+    if (!isCurrent()) return { outcome: 'cancelled' };
     const stageForRoster = getCurrentStage();
     // The absent-vs-empty distinction is load-bearing and deliberately NOT
     // collapsed here: `undefined` means the document predates roster
@@ -197,7 +233,7 @@ export async function runClassroomLoad<TMediaTasks = unknown>({
       const fallbacks = await loadLegacyAgentFallbacks(classroomId);
       // The registry is a global singleton: after any await, re-check that this
       // load is still current before letting the merged roster land anywhere.
-      if (!isCurrent()) return;
+      if (!isCurrent()) return { outcome: 'cancelled' };
       // `null` = the mirror read FAILED (not "mirror is empty"). Skip both
       // the merge and the memo so the next load retries the probe once
       // storage recovers — a transient IndexedDB error must not become a
@@ -217,10 +253,10 @@ export async function runClassroomLoad<TMediaTasks = unknown>({
       }
     }
 
-    if (!isCurrent()) return;
+    if (!isCurrent()) return { outcome: 'cancelled' };
     const generatedAgentIds = applyGeneratedAgents(classroomId, effectiveConfigs);
 
-    if (!isCurrent()) return;
+    if (!isCurrent()) return { outcome: 'cancelled' };
     const settings = getSettings();
     const { selection: next, isUserSet } = restoreSelection({
       persisted: { mode: settings.agentMode, selectedAgentIds: settings.selectedAgentIds },
@@ -233,7 +269,7 @@ export async function runClassroomLoad<TMediaTasks = unknown>({
       },
     });
 
-    if (!isCurrent()) return;
+    if (!isCurrent()) return { outcome: 'cancelled' };
     if (next.mode !== settings.agentMode) settings.setAgentMode(next.mode);
     if (next.selectedAgentIds !== settings.selectedAgentIds) {
       settings.setSelectedAgentIds(next.selectedAgentIds);
@@ -241,11 +277,13 @@ export async function runClassroomLoad<TMediaTasks = unknown>({
     if (isUserSet !== settings.agentSelectionIsUserSet) {
       settings.setAgentSelectionIsUserSet(isUserSet);
     }
+    return { outcome: 'ready' };
   } catch (error) {
     log.error('Failed to load classroom:', error);
     if (isCurrent()) {
       setError(error instanceof Error ? error.message : 'Failed to load classroom');
     }
+    return isCurrent() ? { outcome: 'failed' } : { outcome: 'cancelled' };
   } finally {
     if (isCurrent()) {
       setLoading(false);
@@ -257,16 +295,29 @@ export async function fetchClassroomFromApi(
   classroomId: string,
   _shouldConvert: () => boolean = () => true,
   _deps: DocumentMigrationDeps = {},
-): Promise<ClassroomPayload | null> {
-  const res = await fetch(`/api/classroom?id=${encodeURIComponent(classroomId)}`);
-  if (!res.ok) return null;
+  fetchImpl: typeof globalThis.fetch = globalThis.fetch,
+): Promise<ClassroomFetchResult> {
+  try {
+    const res = await fetchImpl(`/api/classroom?id=${encodeURIComponent(classroomId)}`);
+    if (!res.ok) {
+      // These responses positively establish that this immutable id cannot
+      // resolve to a classroom. Authentication, authorization, conflict, and
+      // other 4xx responses do not prove absence and stay on the error path.
+      if ([400, 404, 410, 422].includes(res.status)) {
+        return { outcome: 'absent' };
+      }
+      return { outcome: 'unavailable', status: res.status };
+    }
 
-  const json = (await res.json()) as {
-    success?: boolean;
-    classroom?: ClassroomPayload;
-  };
-  if (!json.success || !json.classroom) return null;
-  return json.classroom;
+    const json = (await res.json()) as {
+      success?: boolean;
+      classroom?: ClassroomPayload;
+    };
+    if (!json.success || !json.classroom) return { outcome: 'absent' };
+    return { outcome: 'found', classroom: json.classroom };
+  } catch {
+    return { outcome: 'unavailable' };
+  }
 }
 
 export function applyClassroomStageAndScenes(
@@ -358,7 +409,7 @@ export function collectPriorityMediaRefs(
 
 export async function loadRestoredMediaTasksFromDB(stageId: string): Promise<RestoredMediaTasks> {
   try {
-    const { db } = await import('@/lib/utils/database');
+    const { db } = await import('@/lib/device-storage/database');
     const records = await db.mediaFiles.where('stageId').equals(stageId).toArray();
     const state = useStageStore.getState();
     const sameStage = state.stage?.id === stageId;
@@ -640,41 +691,18 @@ export function mergeLegacyAgentFallbacks(
 }
 
 /**
- * Read the legacy roster mirror for a stage as contract-shaped configs.
- * Read-only: production code only reads this table as a migration source for
- * pre-single-source classrooms (plus deletion hygiene when a stage is
- * removed); nothing writes new rows. Returns `null` when the read fails so
- * the caller can distinguish "empty mirror" (memoizable) from "read failed"
- * (retry on the next load).
+ * The legacy roster mirror for a stage, as contract-shaped configs.
+ *
+ * The mirror lived in the pre-server browser database, which the load path no
+ * longer reads: a course whose roster predates the document-embedded model
+ * reaches the server through the one-way importer, which lifts the roster with
+ * {@link mergeLegacyAgentFallbacks} on the way. A course loaded here is a server
+ * document, so its mirror is empty.
  */
 export async function loadLegacyAgentFallbacksFromDB(
-  stageId: string,
+  _stageId: string,
 ): Promise<GeneratedAgentConfig[] | null> {
-  try {
-    const { getGeneratedAgentsByStageId } = await import('@/lib/utils/database');
-    const records = await getGeneratedAgentsByStageId(stageId);
-    return records.map((record) => {
-      // Historical mirror rows spread the whole generated profile, so rows may
-      // carry a voiceConfig that never made it into the declared record type.
-      const voiceConfig = (record as { voiceConfig?: GeneratedAgentConfig['voiceConfig'] })
-        .voiceConfig;
-      return {
-        id: record.id,
-        name: record.name,
-        role: record.role,
-        persona: record.persona,
-        avatar: record.avatar,
-        color: record.color,
-        priority: record.priority,
-        ...(voiceConfig ? { voiceConfig } : {}),
-        ...(record.voiceDesign ? { voiceDesign: record.voiceDesign } : {}),
-      };
-    });
-  } catch {
-    // Signal failure (vs. an empty mirror): the probe memo must not treat a
-    // transient IndexedDB error as "nothing to migrate".
-    return null;
-  }
+  return [];
 }
 
 /**

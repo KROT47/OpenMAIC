@@ -83,12 +83,16 @@ Use Node.js `>=20.9.0` and the repository-pinned pnpm version. Install and start
 
 ```bash
 pnpm install
+pnpm db:up
+# Set DATABASE_URL in .env.local as described in README step 3.
 pnpm dev
 ```
 
 No Codex-specific environment variable and no `OPENAI_API_KEY` are required for ChatGPT/Codex
 subscription authentication. `OPENAI_API_KEY` remains an independent optional setting for the
 normal `openai` provider.
+
+**PostgreSQL and `DATABASE_URL` are required** for server-backed persistence, including local Codex use. See [the README database setup](README.md#server-backed-persistence-postgresql).
 
 Production use requires a generated, high-entropy `ACCESS_CODE`. Follow the
 [README ACCESS_CODE setup](README.md#optional-access_code-shared-deployments), including the
@@ -119,7 +123,7 @@ Never log or copy `data/auth/openai-codex.json`. It contains bearer and refresh 
 ## Browser PKCE sign-in
 
 1. Start OpenMAIC and open **Settings**.
-2. Open **LLM**, then select **Codex**.
+2. Open **Model services → LLM**, then select **Codex**.
 3. Press **Sign in with ChatGPT**.
 4. Complete the OpenAI authorization page in the popup.
 5. OpenAI redirects the browser to `http://localhost:1455/auth/callback`. OpenMAIC validates the
@@ -132,7 +136,7 @@ same machine as the OpenMAIC process, use device-code sign-in instead.
 
 ## Device-code sign-in
 
-1. In **Settings → LLM → Codex**, press **Use device code**.
+1. In **Settings → Model services → LLM → Codex**, press **Use device code**.
 2. Open the displayed verification link, currently `https://auth.openai.com/codex/device`.
 3. Enter the one-time code shown by OpenMAIC and approve access.
 4. Leave the Settings page open while OpenMAIC polls. Success changes the account card to

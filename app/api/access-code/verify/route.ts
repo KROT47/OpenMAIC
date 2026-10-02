@@ -1,15 +1,19 @@
 import { cookies } from 'next/headers';
 import { timingSafeEqual } from 'crypto';
 import { apiError, apiSuccess } from '@/lib/server/api-response';
+import { ACCESS_TOKEN_MAX_AGE_SECONDS } from '@/lib/server/access-token-shared';
 import { createAccessToken } from '@/lib/server/access-token';
-import {
-  ACCESS_TOKEN_MAX_AGE_SECONDS,
-  getAccessCodeConfigurationError,
-} from '@/lib/access-token-policy';
+import { getAccessCodeConfigurationError } from '@/lib/access-token-policy';
 import {
   resolveAccessCodeRateLimitKeys,
   takeAccessCodeAttempt,
 } from '@/lib/server/access-code-rate-limit';
+
+function readCandidateCode(body: unknown): string | null {
+  if (typeof body !== 'object' || body === null) return null;
+  const candidate = (body as { code?: unknown }).code;
+  return typeof candidate === 'string' && candidate.length > 0 ? candidate : null;
+}
 
 export async function POST(request: Request) {
   const accessCode = process.env.ACCESS_CODE;
@@ -33,19 +37,21 @@ export async function POST(request: Request) {
     return response;
   }
 
-  let body: { code?: string };
+  let body: unknown;
   try {
     body = await request.json();
   } catch {
     return apiError('INVALID_REQUEST', 400, 'Invalid JSON body');
   }
 
-  // Constant-time comparison
-  if (!body.code) {
+  const candidate = readCandidateCode(body);
+  if (candidate === null) {
     return apiError('INVALID_REQUEST', 401, 'Invalid access code');
   }
+
+  // Constant-time comparison
   const encoder = new TextEncoder();
-  const a = encoder.encode(body.code);
+  const a = encoder.encode(candidate);
   const b = encoder.encode(accessCode);
   if (a.byteLength !== b.byteLength || !timingSafeEqual(a, b)) {
     return apiError('INVALID_REQUEST', 401, 'Invalid access code');

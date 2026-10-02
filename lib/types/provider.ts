@@ -24,6 +24,7 @@ export type BuiltInProviderId =
   | 'grok'
   | 'tencent-hunyuan'
   | 'xiaomi'
+  | 'tokendance'
   | 'lemonade'
   | 'ollama';
 
@@ -201,4 +202,10 @@ export interface ModelConfig {
   customFetch?: typeof globalThis.fetch;
   /** Server-validated request tier for catalog-gated providers such as Codex. */
   serviceTier?: ModelServiceTier;
+  /**
+   * Optional server-side fetch implementation used for the model's outbound
+   * requests (e.g. a wrapper that re-validates redirect hops). When omitted the
+   * global fetch is used. Never set by client-side consumers.
+   */
+  fetchImpl?: typeof fetch;
 }

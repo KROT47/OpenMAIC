@@ -22,10 +22,13 @@
  * the pointer to the bytes.
  */
 import { splitSqlStatements, type Queryable } from '@openmaic/storage/document/pg';
+import { encodeJson } from '@openmaic/storage/pg-json';
 import {
   nodePostgresTransaction,
   type ConnectableQueryable,
 } from '@openmaic/storage/server/reference';
+
+import { ensureOwnerMergeSchema, fenceOwnerWrite } from './owner-merges';
 
 export const OWNER_MATERIAL_STATUSES = ['uploading', 'ready'] as const;
 export type OwnerMaterialStatus = (typeof OWNER_MATERIAL_STATUSES)[number];
@@ -136,6 +139,8 @@ export async function ensureOwnerMaterialSchema(queryable: Queryable): Promise<v
   for (const statement of splitSqlStatements(OWNER_MATERIAL_SCHEMA)) {
     await queryable.query(statement);
   }
+  // Registration fences on the claim records (./owner-merges.ts).
+  await ensureOwnerMergeSchema(queryable);
 }
 
 interface RawOwnerMaterialRow extends Record<string, unknown> {
@@ -294,6 +299,10 @@ export async function registerOwnerMaterial(
 ): Promise<OwnerMaterialRecord> {
   const withTransaction = nodePostgresTransaction(queryable);
   return withTransaction(async (tx) => {
+    // The identity lock first, as every owner write takes it: a registration
+    // racing a claim of this owner lands before the claim (and is moved) or
+    // is refused -- see ./owner-merges.ts.
+    await fenceOwnerWrite(tx, input.ownerId);
     // hashtextextended is 64-bit (hashtext is 32-bit and could block unrelated
     // owners on a collision); the lock is transaction-scoped and releases on
     // commit or rollback.
@@ -332,7 +341,7 @@ export async function registerOwnerMaterial(
         input.bytes,
         input.originalName ?? null,
         input.ossKey,
-        input.extraction ? JSON.stringify(input.extraction) : null,
+        input.extraction ? encodeJson(input.extraction, 'owner material extraction') : null,
         Date.now(),
       ],
     );

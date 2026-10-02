@@ -4,6 +4,7 @@ import { NextRequest } from 'next/server';
 const mocks = vi.hoisted(() => ({
   runtimeEnabled: true,
   createSession: vi.fn(),
+  readRetirement: vi.fn(async (_ownerId: string): Promise<string | null> => null),
   postUserMessage: vi.fn(),
   softDeleteSession: vi.fn(),
   bindOwnerMaterialsToSession: vi.fn(),
@@ -12,15 +13,18 @@ const mocks = vi.hoisted(() => ({
   listSkills: vi.fn(),
   findSkill: vi.fn(),
   inferSkillIdFromPrompt: vi.fn(),
+  scheduleConversationTitle: vi.fn(),
 }));
 
 vi.mock('@/lib/config/feature-flags', () => ({
   isAgentRuntimeEnabled: () => mocks.runtimeEnabled,
   isAgentRuntimeConfigured: () => mocks.runtimeEnabled,
 }));
-vi.mock('@/lib/server/agent-runtime/owner', () => ({
-  resolveRequestOwnerId: mocks.resolveRequestOwnerId,
-}));
+vi.mock('@/lib/server/identity/resolve', async () =>
+  (await import('../helpers/owner-resolution-mock')).ownerResolveModule(
+    mocks.resolveRequestOwnerId,
+  ),
+);
 // The route reads skills off the explicit `skill` param AND the prompt; pin the
 // lookup to a fixed installed set so no user-skill store or skill directory is
 // touched. `findSkill` is the route's (and the runner's) id-or-name lookup.
@@ -36,11 +40,15 @@ vi.mock('@/lib/server/agent-runtime/store', () => ({
     postUserMessage: mocks.postUserMessage,
     softDeleteSession: mocks.softDeleteSession,
     listSessionsByOwner: mocks.listSessionsByOwner,
+    readRetirement: mocks.readRetirement,
   }),
 }));
 vi.mock('@/lib/server/agent-runtime/session-materials', () => ({
   bindOwnerMaterialsToSession: mocks.bindOwnerMaterialsToSession,
   SessionMaterialBindingError: class SessionMaterialBindingError extends Error {},
+}));
+vi.mock('@/lib/server/agent-runtime/conversation-title-task', () => ({
+  scheduleConversationTitle: mocks.scheduleConversationTitle,
 }));
 
 import { GET, POST } from '@/app/api/agent/sessions/route';
@@ -99,10 +107,37 @@ describe('agent session collection route', () => {
         prompt: 'Build a course',
         skillId: 'custom-skill',
         existingCourse: false,
+        titleState: 'pending',
         origin: 'http://localhost',
       }),
     );
-    await expect(response.json()).resolves.not.toHaveProperty('ownerId');
+    expect(mocks.scheduleConversationTitle).toHaveBeenCalledWith('session-1', 'anon:test');
+  });
+
+  it('does not schedule an ordinary session until its create write resolves', async () => {
+    let resolveCreate:
+      | ((value: Awaited<ReturnType<typeof mocks.createSession>>) => void)
+      | undefined;
+    mocks.createSession.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveCreate = resolve;
+        }),
+    );
+
+    const responsePromise = post({ prompt: 'Build a course' });
+    await vi.waitFor(() => expect(mocks.createSession).toHaveBeenCalledOnce());
+    expect(mocks.scheduleConversationTitle).not.toHaveBeenCalled();
+
+    resolveCreate?.({
+      id: 'session-1',
+      ownerId: 'anon:test',
+      prompt: 'Build a course',
+      stageId: 'agent-session-1',
+      status: 'queued',
+    });
+    expect((await responsePromise).status).toBe(202);
+    expect(mocks.scheduleConversationTitle).toHaveBeenCalledWith('session-1', 'anon:test');
   });
 
   it('accepts a skill by its user-visible name and freezes the durable id, like the runner', async () => {
@@ -128,6 +163,7 @@ describe('agent session collection route', () => {
       { text: 'Compare this', courseRefs },
       { expectedOwnerId: 'anon:test' },
     );
+    expect(mocks.scheduleConversationTitle).toHaveBeenCalledWith('session-1', 'anon:test');
     await expect(response.json()).resolves.toMatchObject({
       id: 'session-1',
       status: 'queued',
@@ -152,6 +188,12 @@ describe('agent session collection route', () => {
         materials: [{ materialId: 'material-1', originalName: 'notes.pdf', bytes: 42 }],
       },
       { expectedOwnerId: 'anon:test' },
+    );
+    expect(mocks.bindOwnerMaterialsToSession.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.postUserMessage.mock.invocationCallOrder[0]!,
+    );
+    expect(mocks.postUserMessage.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.scheduleConversationTitle.mock.invocationCallOrder[0]!,
     );
   });
 
@@ -190,6 +232,19 @@ describe('agent session collection route', () => {
     });
   });
 
+  it('does not schedule when the opening message write fails', async () => {
+    mocks.postUserMessage.mockRejectedValue(new Error('message write failed'));
+
+    const response = await post({
+      prompt: 'Compare this',
+      courseRefs: [{ kind: 'course', stageId: 'stage-2', title: 'Referenced course' }],
+    });
+
+    expect(response.status).toBe(500);
+    expect(mocks.softDeleteSession).toHaveBeenCalledWith('session-1', 'anon:test');
+    expect(mocks.scheduleConversationTitle).not.toHaveBeenCalled();
+  });
+
   it('rejects an explicit skill that matches neither id nor name', async () => {
     const response = await post({ prompt: 'Build a course', skill: 'my-unknown' });
 
@@ -217,8 +272,46 @@ describe('agent session collection route', () => {
         prompt: 'stage-1',
         stageId: 'stage-1',
         existingCourse: true,
+        titleState: 'pending',
         status: 'succeeded',
       }),
+    );
+    expect(mocks.scheduleConversationTitle).not.toHaveBeenCalled();
+  });
+
+  it('persists empty opening text instead of a synthetic Stage id for existing-course refs', async () => {
+    const courseRefs = [{ kind: 'course', stageId: 'stage-2', title: 'Referenced course' }];
+
+    const response = await post({ existingCourse: true, stageId: 'stage-1', courseRefs });
+
+    expect(response.status).toBe(202);
+    expect(mocks.postUserMessage).toHaveBeenCalledWith(
+      'session-1',
+      { text: '', courseRefs },
+      { expectedOwnerId: 'anon:test' },
+    );
+    expect(mocks.scheduleConversationTitle).not.toHaveBeenCalled();
+  });
+
+  it('schedules an explicit existing-course opening prompt after it is durable', async () => {
+    const courseRefs = [{ kind: 'course', stageId: 'stage-2', title: 'Referenced course' }];
+
+    const response = await post({
+      existingCourse: true,
+      stageId: 'stage-1',
+      prompt: 'Compare this lesson',
+      courseRefs,
+    });
+
+    expect(response.status).toBe(202);
+    expect(mocks.postUserMessage).toHaveBeenCalledWith(
+      'session-1',
+      { text: 'Compare this lesson', courseRefs },
+      { expectedOwnerId: 'anon:test' },
+    );
+    expect(mocks.scheduleConversationTitle).toHaveBeenCalledWith('session-1', 'anon:test');
+    expect(mocks.postUserMessage.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.scheduleConversationTitle.mock.invocationCallOrder[0]!,
     );
   });
 
@@ -252,12 +345,11 @@ describe('agent session collection route', () => {
 
     expect(response.status).toBe(500);
     expect(response.headers.get('set-cookie')).toContain('anonymous_id=test');
+    expect(mocks.scheduleConversationTitle).not.toHaveBeenCalled();
   });
 
   it('lists only sessions for the resolved owner', async () => {
-    mocks.listSessionsByOwner.mockResolvedValue([
-      { id: 'session-1', ownerId: 'anon:test', status: 'running' },
-    ]);
+    mocks.listSessionsByOwner.mockResolvedValue([{ id: 'session-1', status: 'running' }]);
     const response = await GET(new NextRequest('http://localhost/api/agent/sessions'));
 
     expect(response.status).toBe(200);

@@ -8,7 +8,12 @@
  */
 
 import { NextRequest } from 'next/server';
-import { generateTTS, QwenTTSError, TTSRateLimitError } from '@/lib/audio/tts-providers';
+import {
+  generateTTS,
+  QwenTTSError,
+  TTSInvalidResponseError,
+  TTSRateLimitError,
+} from '@/lib/audio/tts-providers';
 import { TTS_PROVIDERS } from '@/lib/audio/constants';
 import { recordGenerationUsage } from '@/lib/server/usage-storage';
 import {
@@ -22,6 +27,7 @@ import {
 import type { TTSProviderId } from '@/lib/audio/types';
 import { createLogger } from '@/lib/logger';
 import { apiError, apiSuccess } from '@/lib/server/api-response';
+import { findUnsafeNetworkTargetError, validatePublicUrlForSSRF } from '@/lib/server/ssrf-guard';
 import { VOXCPM_AUTO_VOICE_ID, VOXCPM_TTS_PROVIDER_ID } from '@/lib/audio/voxcpm';
 import { QwenVoiceCloneError, qwenVoiceCloneErrorMessage } from '@/lib/audio/qwen-voice-clone';
 import { isQwenCloneVoice } from '@/lib/audio/constants';
@@ -93,12 +99,15 @@ export async function POST(req: NextRequest) {
     // Managed providers are admin-owned: ignore any client-sent key/baseUrl.
     const managed = isServerConfiguredProvider('tts', ttsProviderId);
     const clientBaseUrl = managed ? undefined : ttsBaseUrl || undefined;
+    // A client-supplied BYOK base URL always runs under the strict public
+    // policy; only a server-managed (or built-in default) target may inherit the
+    // operator's ALLOW_LOCAL_NETWORKS opt-in. Never derived from request input.
+    const publicOnly = Boolean(clientBaseUrl);
     if (clientBaseUrl) {
-      return apiError(
-        'INVALID_URL',
-        403,
-        'Custom TTS base URLs must be configured by the server operator',
-      );
+      const ssrfError = await validatePublicUrlForSSRF(clientBaseUrl);
+      if (ssrfError) {
+        return apiError('INVALID_URL', 403, ssrfError);
+      }
     }
 
     const apiKey = resolveTTSApiKey(ttsProviderId, managed ? undefined : ttsApiKey || undefined);
@@ -129,6 +138,9 @@ export async function POST(req: NextRequest) {
       speed: qwenCloneVoice ? 1 : requestedSpeed,
       apiKey,
       baseUrl,
+      publicOnly,
+      // A server-configured provider's endpoint may be on a local network.
+      managed,
       providerOptions: {
         ...(ttsProviderOptions || {}),
         ...(qwenCloneVoice ? { qwenVoiceClone: true } : {}),
@@ -164,8 +176,15 @@ export async function POST(req: NextRequest) {
       `TTS generation failed [provider=${ttsProviderId ?? 'unknown'}, voice=${ttsVoice ?? 'unknown'}, audioId=${audioId ?? 'unknown'}]:`,
       error,
     );
+    const blocked = findUnsafeNetworkTargetError(error);
+    if (blocked) {
+      return apiError('INVALID_URL', 403, blocked.message);
+    }
     if (error instanceof TTSRateLimitError) {
       return apiError('RATE_LIMITED', 429, error.message);
+    }
+    if (error instanceof TTSInvalidResponseError) {
+      return apiError(error.code, error.httpStatus, error.message);
     }
     if (error instanceof QwenVoiceCloneError) {
       return apiError(error.code, error.httpStatus || 502, qwenVoiceCloneErrorMessage(error));

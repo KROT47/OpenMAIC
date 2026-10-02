@@ -25,6 +25,12 @@ export default defineConfig({
     // Playwright, so this only boots the already-built server (`pnpm start`).
     // The 120s budget covers startup, not the (much slower) build. Locally we
     // run the dev server.
+    //
+    // The server refuses to start without DATABASE_URL (courses are stored in
+    // PostgreSQL). CI provides a Postgres service and sets it for the job;
+    // locally run `pnpm db:up` and set it in .env.local or the environment.
+    // Specs seed their courses through the app's persistence endpoint
+    // (e2e/fixtures/server-seed.ts), each under a fresh id.
     command: process.env.CI ? 'pnpm start' : 'pnpm dev',
     url: 'http://localhost:3002',
     reuseExistingServer: !process.env.CI,
@@ -32,6 +38,11 @@ export default defineConfig({
     // Enable the MAIC Editor (Pro mode) so editor e2e can reach it. This is a
     // build-time NEXT_PUBLIC_* flag: in CI it must be set on the dedicated
     // `pnpm build` step; locally `pnpm dev` reads it here.
-    env: { PORT: '3002', NEXT_PUBLIC_MAIC_EDITOR_ENABLED: 'true' },
+    env: {
+      PORT: '3002',
+      NEXT_PUBLIC_MAIC_EDITOR_ENABLED: 'true',
+      // Leave Pi chat unset so the browser suite exercises the shipped default.
+      NEXT_PUBLIC_COURSEWARE_REFERENCE_ENABLED: 'true',
+    },
   },
 });

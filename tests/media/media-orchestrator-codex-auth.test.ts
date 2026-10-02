@@ -39,11 +39,13 @@ vi.mock('@/lib/store/media-generation', () => ({
   useMediaGenerationStore: { getState: () => mocks.mediaStore },
 }));
 
-vi.mock('@/lib/utils/database', () => ({
+vi.mock('@/lib/device-storage/database', () => ({
   db: {
     mediaFiles: {
       put: mocks.mediaFilesPut,
       delete: mocks.mediaFilesDelete,
+      get: async () => undefined,
+      where: () => ({ equals: () => ({ toArray: async () => [] }) }),
     },
   },
   mediaFileKey: (stageId: string, elementId: string) => `${stageId}:${elementId}`,
@@ -56,6 +58,35 @@ vi.mock('@/lib/logger', () => ({
     error: mocks.logError,
     debug: vi.fn(),
   }),
+}));
+
+vi.mock('@/lib/store/stage', () => ({
+  useStageStore: {
+    getState: () => ({ stage: { id: 'stage-1' }, scenes: [], generationComplete: false }),
+  },
+}));
+vi.mock('@/lib/classroom/generation-permission', () => ({ mayGenerateForStage: () => true }));
+vi.mock('@/lib/media/persist-media-reference', async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  persistGeneratedMediaReference: async () => 'held',
+  placePendingMediaAllocations: () => false,
+}));
+vi.mock('@/lib/media/pending-media-allocations', () => ({
+  pendingMediaAllocation: () => undefined,
+  forgetMediaAllocation: () => undefined,
+  takePendingMediaAllocations: () => [],
+}));
+vi.mock('@/lib/media/commit-to-pool', async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  commitToPool: async (args: {
+    writeBack: (id: string) => Promise<unknown>;
+    mirror: (id: string) => Promise<void>;
+  }) => {
+    const assetId = 'ast_codex_image';
+    const placement = await args.writeBack(assetId);
+    await args.mirror(assetId);
+    return { status: 'stored', assetId, placement };
+  },
 }));
 
 import { generateMediaForOutlines } from '@/lib/media/media-orchestrator';
@@ -125,7 +156,8 @@ describe('media orchestrator Codex auth invalidation', () => {
       size: number;
     };
     expect(record).toMatchObject({
-      id: 'stage-1:image-1',
+      id: 'stage-1:ast_codex_image',
+      placeholderRef: 'image-1',
       type: 'image',
       mimeType: 'image/png',
       size: imageBytes.byteLength,
@@ -136,6 +168,7 @@ describe('media orchestrator Codex auth invalidation', () => {
     expect(mocks.mediaStore.markDone).toHaveBeenCalledWith(
       'image-1',
       'blob:codex-image-page-ready',
+      undefined,
     );
     expect(mocks.mediaStore.markFailed).not.toHaveBeenCalled();
   });

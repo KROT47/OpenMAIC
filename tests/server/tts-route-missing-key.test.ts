@@ -133,7 +133,54 @@ describe('POST /api/generate/tts missing-key contract (#665)', () => {
     );
   });
 
-  it('rejects a client base URL even for a keyless provider', async () => {
+  it('does not pre-empt keyless providers (e.g. voxcpm-tts) with the key guard', async () => {
+    // A server-managed keyless provider owns a local base URL; the key guard
+    // must not fire, and a server-configured localhost backend is allowed under
+    // the operator's ALLOW_LOCAL_NETWORKS opt-in.
+    yamlOverride = 'tts:\n  voxcpm-tts:\n    baseUrl: http://localhost:8000/v1\n';
+    vi.stubEnv('ALLOW_LOCAL_NETWORKS', 'true');
+    const { POST } = await import('@/app/api/generate/tts/route');
+    const res = await POST(ttsRequest({ ttsProviderId: 'voxcpm-tts', ttsVoice: 'auto' }));
+
+    expect(res.status).toBe(200);
+    expect(mocks.generateTTS).toHaveBeenCalledWith(
+      expect.objectContaining({ providerId: 'voxcpm-tts', publicOnly: false }),
+      'Hello',
+    );
+  });
+
+  it('marks a server-configured provider as managed, so its local endpoint needs no opt-in', async () => {
+    yamlOverride = 'tts:\n  voxcpm-tts:\n    baseUrl: http://127.0.0.1:8000/v1\n';
+    const { POST } = await import('@/app/api/generate/tts/route');
+    const res = await POST(ttsRequest({ ttsProviderId: 'voxcpm-tts', ttsVoice: 'auto' }));
+
+    expect(res.status).toBe(200);
+    expect(mocks.generateTTS).toHaveBeenCalledWith(
+      expect.objectContaining({
+        providerId: 'voxcpm-tts',
+        baseUrl: 'http://127.0.0.1:8000/v1',
+        managed: true,
+        publicOnly: false,
+      }),
+      'Hello',
+    );
+  });
+
+  it('does not mark an unmanaged provider on its catalog default endpoint as managed', async () => {
+    const { POST } = await import('@/app/api/generate/tts/route');
+    const res = await POST(ttsRequest({ ttsProviderId: 'voxcpm-tts', ttsVoice: 'auto' }));
+
+    expect(res.status).toBe(200);
+    expect(mocks.generateTTS).toHaveBeenCalledWith(
+      expect.objectContaining({ providerId: 'voxcpm-tts', managed: false, publicOnly: false }),
+      'Hello',
+    );
+  });
+
+  it('refuses a client-supplied localhost base URL even with ALLOW_LOCAL_NETWORKS=true', async () => {
+    // The local-network opt-in is for the operator's own providers, never for a
+    // client-chosen BYOK endpoint.
+    vi.stubEnv('ALLOW_LOCAL_NETWORKS', 'true');
     const { POST } = await import('@/app/api/generate/tts/route');
     const res = await POST(
       ttsRequest({
@@ -142,8 +189,10 @@ describe('POST /api/generate/tts missing-key contract (#665)', () => {
         ttsBaseUrl: 'http://localhost:8000/v1',
       }),
     );
+    const json = await res.json();
 
     expect(res.status).toBe(403);
+    expect(json).toMatchObject({ success: false, errorCode: 'INVALID_URL' });
     expect(mocks.generateTTS).not.toHaveBeenCalled();
   });
 

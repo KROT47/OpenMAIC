@@ -27,6 +27,7 @@ import { Readability } from '@mozilla/readability';
 import { parseHTML } from 'linkedom/worker';
 import TurndownService from 'turndown';
 import {
+  Agent,
   fetch as undiciFetch,
   type Dispatcher,
   type RequestInit as UndiciRequestInit,
@@ -45,7 +46,7 @@ import {
   resolvePDFBaseUrl,
 } from '@/lib/server/provider-config';
 import { normalizeUrlForStrictFetch } from '@/lib/server/ssrf-guard';
-import { createPinnedFetchAgent } from '@/lib/server/strict-fetch';
+import { createPinnedAgent } from '@/lib/server/pinned-dispatcher';
 import type { AgentSessionMaterial } from '@openmaic/storage';
 
 import { createWebMaterial } from './session-materials';
@@ -60,6 +61,7 @@ const ALLOWED_CONTENT_TYPES = new Set([
 const DEFAULT_MAX_BYTES = 5 * 1024 * 1024;
 const DEFAULT_MIN_CHARS = 200;
 const MAX_REDIRECTS = 5;
+const CONNECT_TIMEOUT_MS = 5_000;
 const HEADERS_TIMEOUT_MS = 10_000;
 const BODY_TIMEOUT_MS = 30_000;
 const MAX_PDF_PAGES = 50;
@@ -123,7 +125,16 @@ export interface FetchUrlOptions {
   signal?: AbortSignal;
 }
 
-export { assertSafeLookupAddresses, createPinnedFetchAgent } from '@/lib/server/strict-fetch';
+export { assertSafeLookupAddresses } from '@/lib/server/pinned-dispatcher';
+
+/** Pin connection-time DNS to the exact answer set that passed IP classification. */
+export function createPinnedFetchAgent(): Agent {
+  return createPinnedAgent({
+    headersTimeout: HEADERS_TIMEOUT_MS,
+    bodyTimeout: BODY_TIMEOUT_MS,
+    connectTimeout: CONNECT_TIMEOUT_MS,
+  });
+}
 
 function mediaType(response: Response): string {
   return (response.headers.get('content-type') ?? '').split(';', 1)[0]!.trim().toLowerCase();
@@ -286,6 +297,7 @@ function pdfExtractionCandidates(): Array<{
           apiKey: resolvePDFApiKey(id) || undefined,
           baseUrl: resolvePDFBaseUrl(id),
           allowEnvFallback: true,
+          managed: true,
           // fetch_url persists and returns text only. Avoid materializing
           // attacker-controlled PDF rasters in the application process.
           textOnly: true,

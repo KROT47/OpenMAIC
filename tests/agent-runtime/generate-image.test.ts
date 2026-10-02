@@ -7,7 +7,6 @@ const mocks = vi.hoisted(() => ({
   recordGenerationUsage: vi.fn().mockResolvedValue(undefined),
   mkdir: vi.fn().mockResolvedValue(undefined),
   writeFile: vi.fn().mockResolvedValue(undefined),
-  closeTransport: vi.fn().mockResolvedValue(undefined),
   log: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));
 
@@ -15,11 +14,13 @@ vi.mock('@/lib/server/usage-storage', () => ({
   recordGenerationUsage: mocks.recordGenerationUsage,
 }));
 vi.mock('node:fs', () => ({ promises: { mkdir: mocks.mkdir, writeFile: mocks.writeFile } }));
-vi.mock('@/lib/server/strict-fetch', () => ({
-  createStrictFetchTransport: () => ({
-    fetch: (...args: Parameters<typeof fetch>) => fetch(...args),
-    close: mocks.closeTransport,
-  }),
+vi.mock('@/lib/server/ssrf-guard', () => ({ validateUrlForSSRF: async () => null }));
+// These tests cover storage and lifecycle; the provider-URL download policy
+// (HTTPS, strict public addresses, pinned transport) is covered in
+// tests/server/provider-result-fetch.test.ts. Delegate to the stubbed fetch.
+vi.mock('@/lib/server/provider-result-fetch', () => ({
+  fetchProviderResultUrl: (url: string, init?: { signal?: AbortSignal }) =>
+    globalThis.fetch(url, init),
 }));
 vi.mock('@/lib/logger', () => ({ createLogger: () => mocks.log }));
 
@@ -28,6 +29,7 @@ import {
   defaultPersistGeneratedImage,
   GenerateImageParams,
 } from '@/lib/server/agent-runtime/generate-image';
+import { createFakeAssetStore } from './_fake-asset-store';
 
 describe('generate_image tool', () => {
   afterEach(() => {
@@ -74,6 +76,7 @@ describe('generate_image tool', () => {
   it('fails loudly when no server image provider is configured', async () => {
     const tool = buildGenerateImageTool({
       sessionId: 'session-owner',
+      ownerId: 'user:test-owner',
       getConfiguredProviders: () => ({}),
     });
 
@@ -100,6 +103,7 @@ describe('generate_image tool', () => {
     const generateConfiguredImage = vi.fn();
     const tool = buildGenerateImageTool({
       sessionId: 'session-owner',
+      ownerId: 'user:test-owner',
       getConfiguredProviders: () => ({ 'openai-image': { models: [] } }),
       resolveProviderConfig: () => ({
         providerId: 'openai-image',
@@ -138,7 +142,7 @@ describe('generate_image tool', () => {
     expect(generateConfiguredImage).not.toHaveBeenCalled();
   });
 
-  it('generates, persists and returns a renderable src under the bound course scope', async () => {
+  it('generates, stores in the asset pool and returns the allocated id under the bound course scope', async () => {
     vi.stubEnv('DEFAULT_IMAGE_PROVIDER', 'openai-image');
     const generated = {
       base64: Buffer.from('real-image-bytes').toString('base64'),
@@ -146,8 +150,10 @@ describe('generate_image tool', () => {
       height: 576,
     };
     const generateConfiguredImage = vi.fn().mockResolvedValue(generated);
+    const pool = createFakeAssetStore();
     const tool = buildGenerateImageTool({
       sessionId: 'session-owner',
+      ownerId: 'user:test-owner',
       getConfiguredProviders: () => ({ 'openai-image': { models: ['gpt-image-1'] } }),
       resolveProviderConfig: () => ({
         providerId: 'openai-image',
@@ -156,6 +162,10 @@ describe('generate_image tool', () => {
         model: 'gpt-image-1',
       }),
       generateConfiguredImage,
+      // The real default persist, against a store rather than a database: the
+      // assertions below are about what the tool writes and returns, so the
+      // byte path under test has to be the production one.
+      persistGeneratedImage: (input) => defaultPersistGeneratedImage(input, pool.store),
     });
 
     const result = (await tool.execute(
@@ -186,19 +196,25 @@ describe('generate_image tool', () => {
         signal: expect.any(AbortSignal),
       }),
     );
-    expect(mocks.writeFile).toHaveBeenCalledWith(
-      expect.stringMatching(/stage-owner\/media\/generated-[a-f0-9]{64}\.png$/),
-      Buffer.from('real-image-bytes'),
-    );
+    // The bytes went to the asset pool, under the run owner's asset
+    // principal, carrying the course they belong to; nothing was written to
+    // the local classroom-media directory.
+    expect(pool.puts).toEqual([
+      {
+        principalKey: 'owner:user:test-owner',
+        bytes: Buffer.from('real-image-bytes'),
+        type: 'image/png',
+        meta: { contentType: 'image/png', stageId: 'stage-owner', kind: 'image' },
+      },
+    ]);
+    expect(mocks.writeFile).not.toHaveBeenCalled();
     // Success details are provider-neutral: no provider id leaks into the
     // transcript. The vendor choice stays in the server-side log, correlated
-    // by the tool-call id. The persisted src is an origin-independent RELATIVE
-    // classroom-media path (the agent runtime has no request origin), which
-    // the browser resolves against the page origin.
+    // by the tool-call id. The src the model receives is the id the pool
+    // allocated, which `patch_stage` writes verbatim onto an element -- that
+    // write is what commits the allocation.
     expect(result.details).toEqual({
-      src: expect.stringMatching(
-        /^\/api\/classroom-media\/stage-owner\/media\/generated-[a-f0-9]{64}\.png$/,
-      ),
+      src: 'ast_fake_1',
       width: 1024,
       height: 576,
     });
@@ -211,6 +227,21 @@ describe('generate_image tool', () => {
     );
   });
 
+  it('refuses to store generated bytes without the run owner', async () => {
+    const pool = createFakeAssetStore();
+    await expect(
+      defaultPersistGeneratedImage(
+        {
+          result: { base64: Buffer.from('bytes').toString('base64'), width: 1, height: 1 },
+          stageId: 'stage-owner',
+          signal: new AbortController().signal,
+        },
+        pool.store,
+      ),
+    ).rejects.toThrow('without the run owner');
+    expect(pool.puts).toEqual([]);
+  });
+
   it('fails loudly when the generated image exceeds the byte cap', async () => {
     const oversized = {
       base64: Buffer.alloc(MAX_REMOTE_IMAGE_BYTES + 1).toString('base64'),
@@ -221,13 +252,14 @@ describe('generate_image tool', () => {
       defaultPersistGeneratedImage({
         result: oversized,
         stageId: 'stage-owner',
+        ownerId: 'user:test-owner',
         signal: new AbortController().signal,
       }),
     ).rejects.toThrow(`exceeds the ${MAX_REMOTE_IMAGE_BYTES}-byte limit`);
     expect(mocks.writeFile).not.toHaveBeenCalled();
   });
 
-  it('materializes a provider-hosted URL through classroom media', async () => {
+  it('materializes a provider-hosted URL into the asset pool', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue(
@@ -236,17 +268,125 @@ describe('generate_image tool', () => {
         }),
       ),
     );
+    const pool = createFakeAssetStore();
     await expect(
-      defaultPersistGeneratedImage({
-        result: { url: 'https://cdn.example.com/generated/photo.jpg', width: 1024, height: 576 },
-        stageId: 'stage-owner',
-        signal: new AbortController().signal,
+      defaultPersistGeneratedImage(
+        {
+          result: { url: 'https://cdn.example.com/generated/photo.jpg', width: 1024, height: 576 },
+          stageId: 'stage-owner',
+          ownerId: 'user:test-owner',
+          signal: new AbortController().signal,
+        },
+        pool.store,
+      ),
+    ).resolves.toBe('ast_fake_1');
+    // The provider's content type travels to the entry, so the bytes are
+    // served back as what they are.
+    expect(pool.puts[0]).toMatchObject({
+      bytes: Buffer.from('real-image-bytes'),
+      type: 'image/jpeg',
+      meta: { contentType: 'image/jpeg', stageId: 'stage-owner', kind: 'image' },
+    });
+    expect(mocks.writeFile).not.toHaveBeenCalled();
+  });
+
+  it('records the media type the adapter reported for inline bytes', async () => {
+    // Inline bytes carry no `Content-Type`, so the adapter that received them is
+    // the only thing that knows what they are. Recording a constant instead
+    // would store a Grok JPEG as a PNG — served back as the wrong content type
+    // and written to disk under a `.png` extension. The URL path above reads
+    // this from the response headers.
+    const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46]);
+    const pool = createFakeAssetStore();
+    await expect(
+      defaultPersistGeneratedImage(
+        {
+          result: {
+            base64: jpeg.toString('base64'),
+            mimeType: 'image/jpeg',
+            width: 1024,
+            height: 576,
+          },
+          stageId: 'stage-owner',
+          ownerId: 'user:test-owner',
+          signal: new AbortController().signal,
+        },
+        pool.store,
+      ),
+    ).resolves.toBe('ast_fake_1');
+    expect(pool.puts[0]).toMatchObject({
+      bytes: jpeg,
+      type: 'image/jpeg',
+      meta: { contentType: 'image/jpeg', stageId: 'stage-owner', kind: 'image' },
+    });
+    expect(mocks.writeFile).not.toHaveBeenCalled();
+  });
+
+  it('falls back to image/png for inline bytes whose adapter reported no type', async () => {
+    // Every adapter that predates the field omits it, and PNG is what this path
+    // recorded for all of them.
+    const pool = createFakeAssetStore();
+    await expect(
+      defaultPersistGeneratedImage(
+        {
+          result: {
+            base64: Buffer.from('real-image-bytes').toString('base64'),
+            width: 1,
+            height: 1,
+          },
+          stageId: 'stage-owner',
+          ownerId: 'user:test-owner',
+          signal: new AbortController().signal,
+        },
+        pool.store,
+      ),
+    ).resolves.toBe('ast_fake_1');
+    expect(pool.puts[0]).toMatchObject({
+      type: 'image/png',
+      meta: { contentType: 'image/png', stageId: 'stage-owner', kind: 'image' },
+    });
+  });
+
+  it('fails the call with a readable error and writes nothing when the store is full', async () => {
+    const pool = createFakeAssetStore({ full: true });
+    const generateConfiguredImage = vi.fn().mockResolvedValue({
+      base64: Buffer.from('real-image-bytes').toString('base64'),
+      width: 1024,
+      height: 576,
+    });
+    const tool = buildGenerateImageTool({
+      sessionId: 'session-owner',
+      ownerId: 'user:test-owner',
+      getConfiguredProviders: () => ({ 'openai-image': { models: ['gpt-image-1'] } }),
+      resolveProviderConfig: () => ({
+        providerId: 'openai-image',
+        apiKey: 'test-key',
+        baseUrl: 'https://api.openai.com/v1',
+        model: 'gpt-image-1',
       }),
-    ).resolves.toMatch(/^\/api\/classroom-media\/stage-owner\/media\//);
-    expect(mocks.writeFile).toHaveBeenCalledWith(
-      expect.stringMatching(/\.jpg$/),
-      Buffer.from('real-image-bytes'),
-    );
+      generateConfiguredImage,
+      persistGeneratedImage: (input) => defaultPersistGeneratedImage(input, pool.store),
+    });
+
+    const result = (await tool.execute(
+      'call-1',
+      { stageId: 'stage-owner', prompt: 'A microscope' },
+      undefined,
+    )) as { isError?: boolean; content: { text: string }[]; details: Record<string, unknown> };
+
+    // The model is told what happened in terms it can act on, and is told
+    // nothing was saved -- no src, no half-written element, and above all no
+    // fallback to a second storage model.
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain('asset storage is full');
+    expect(result.content[0].text).toContain('Nothing was saved');
+    expect(result.details).toEqual({
+      stageId: 'stage-owner',
+      reason: 'ASSET_QUOTA_EXCEEDED',
+    });
+    expect(result.details.src).toBeUndefined();
+    expect(pool.puts).toEqual([]);
+    expect(mocks.writeFile).not.toHaveBeenCalled();
   });
 
   it('skips a force-disabled provider in the selector even when it has a key', async () => {
@@ -257,6 +397,7 @@ describe('generate_image tool', () => {
     });
     const tool = buildGenerateImageTool({
       sessionId: 'session-owner',
+      ownerId: 'user:test-owner',
       // openai-image is force-disabled (`{ disabled: true }`); seedream is the
       // only enabled entry, so the selector must pick seedream (#665).
       getConfiguredProviders: () => ({
@@ -270,6 +411,8 @@ describe('generate_image tool', () => {
         model: 'doubao-seedream-3-0-t2i-250415',
       }),
       generateConfiguredImage,
+      persistGeneratedImage: (input) =>
+        defaultPersistGeneratedImage(input, createFakeAssetStore().store),
     });
 
     const result = (await tool.execute(
@@ -290,6 +433,7 @@ describe('generate_image tool', () => {
     const generateConfiguredImage = vi.fn();
     const tool = buildGenerateImageTool({
       sessionId: 'session-owner',
+      ownerId: 'user:test-owner',
       // openai-image is configured but force-disabled; the env default names it,
       // so the call must fail instead of using the disabled provider (#665).
       getConfiguredProviders: () => ({ 'openai-image': { disabled: true } }),
@@ -314,6 +458,7 @@ describe('generate_image tool', () => {
       .mockRejectedValue(new Error('s3://internal-bucket-xyz quota exceeded'));
     const tool = buildGenerateImageTool({
       sessionId: 'session-owner',
+      ownerId: 'user:test-owner',
       getConfiguredProviders: () => ({ 'openai-image': { models: ['gpt-image-1'] } }),
       resolveProviderConfig: () => ({
         providerId: 'openai-image',

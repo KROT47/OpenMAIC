@@ -1,3 +1,4 @@
+import packageJson from '@/package.json';
 import { describe, expect, it, vi } from 'vitest';
 
 import {
@@ -122,8 +123,8 @@ describe('Codex image request contract', () => {
     expect(headers.get('authorization')).toBe('Bearer access-secret');
     expect(headers.get('chatgpt-account-id')).toBe('account-secret');
     expect(headers.get('originator')).toBe('openmaic');
-    expect(headers.get('user-agent')).toMatch(/^OpenMAIC\/1\.0\.0/);
-    expect(headers.get('version')).toBe('1.0.0');
+    expect(headers.get('user-agent')).toMatch(/^OpenMAIC\/\d+\.\d+\.\d+ /);
+    expect(headers.get('version')).toBe(packageJson.version);
     expect(headers.get('content-type')).toBe('application/json');
   });
 

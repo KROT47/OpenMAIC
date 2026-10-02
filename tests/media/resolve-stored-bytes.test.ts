@@ -6,7 +6,7 @@ const mocks = vi.hoisted(() => ({
   getState: vi.fn(),
 }));
 
-vi.mock('@/lib/utils/database', () => ({
+vi.mock('@/lib/device-storage/database', () => ({
   db: { mediaFiles: { get: mocks.mediaGet } },
   mediaFileKey: (stageId: string, ref: string) => `${stageId}:${ref}`,
 }));
@@ -20,7 +20,7 @@ vi.mock('@/lib/store/media-generation', () => ({
 }));
 
 import { resolveStoredBytes } from '@/lib/media/resolve-stored-bytes';
-import type { MediaFileRecord } from '@/lib/utils/database';
+import type { MediaFileRecord } from '@/lib/device-storage/database';
 
 const STRICT = { requireOk: true, requireNonEmpty: true } as const;
 
@@ -303,7 +303,7 @@ describe('shared stored-bytes resolution', () => {
    */
   it("derives the effective ref from a supplied row's compound id", async () => {
     const record = {
-      id: 'stage-1:gen_img_7',
+      id: 'stage-1:ast_img_7',
       blob: new Blob(['row-bytes']),
     } as unknown as MediaFileRecord;
 
@@ -314,7 +314,29 @@ describe('shared stored-bytes resolution', () => {
     });
 
     expect(await bytes?.text()).toBe('row-bytes');
-    expect(mocks.withAssetUrl).toHaveBeenCalledWith('gen_img_7', expect.any(Function));
+    expect(mocks.withAssetUrl).toHaveBeenCalledWith('ast_img_7', expect.any(Function));
+  });
+
+  /**
+   * The pool allocates every id it holds, so a reference this application
+   * minted itself was never in it. Asking anyway is a real request once the
+   * pool is server-backed — one per element per load, forever on a course that
+   * still holds placeholders.
+   */
+  it('does not consult the pool for a reference it could never have allocated', async () => {
+    const record = {
+      id: 'stage-1:gen_img_7',
+      blob: new Blob(['row-bytes']),
+    } as unknown as MediaFileRecord;
+
+    const bytes = await resolveStoredBytes('gen_img_7', {
+      stageId: 'stage-1',
+      record,
+      fetchPolicy: STRICT,
+    });
+
+    expect(await bytes?.text()).toBe('row-bytes');
+    expect(mocks.withAssetUrl).not.toHaveBeenCalled();
   });
 
   /**

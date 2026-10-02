@@ -24,6 +24,7 @@ const ENV_PREFIXES_TO_CLEAR = [
   'TENCENT_HUNYUAN',
   'XIAOMI',
   'MIMO',
+  'TOKENDANCE',
   'HY3',
   'OLLAMA',
   'BEDROCK',
@@ -53,6 +54,7 @@ const ENV_PREFIXES_TO_CLEAR = [
   'VIDEO_SORA',
   'VIDEO_MINIMAX',
   'VIDEO_GROK',
+  'EXA',
   'BOCHA',
   'WEB_SEARCH_MINIMAX',
   'WEB_SEARCH_CLAUDE',
@@ -314,6 +316,17 @@ providers:
       expect(providers.xiaomi.models).toEqual(['mimo-v2.5-pro']);
     });
 
+    it('maps TokenDance env vars to the built-in OpenAI-compatible provider', async () => {
+      vi.stubEnv('TOKENDANCE_API_KEY', 'sk-td');
+      vi.stubEnv('TOKENDANCE_BASE_URL', 'https://tokendance.space/gateway/v1');
+      vi.stubEnv('TOKENDANCE_MODELS', 'deepseek-v4.1-flash,glm-5.3');
+      const { getServerProviders, resolveBaseUrl } = await import('@/lib/server/provider-config');
+      const providers = getServerProviders();
+
+      expect(providers.tokendance.models).toEqual(['deepseek-v4.1-flash', 'glm-5.3']);
+      expect(resolveBaseUrl('tokendance')).toBe('https://tokendance.space/gateway/v1');
+    });
+
     it('does not treat HY3 as an env prefix', async () => {
       vi.stubEnv('HY3_API_KEY', 'sk-hy3');
       vi.stubEnv('HY3_MODELS', 'hy3-preview');
@@ -427,6 +440,17 @@ providers:
       expect(resolveWebSearchBaseUrl('bocha')).toBe('https://proxy.example.com/bocha');
       // The map exposes only the managed flag (presence) — not the base URL.
       expect(getServerWebSearchProviders().bocha).toEqual({});
+    });
+
+    it('resolves Exa API key and base URL from env vars', async () => {
+      vi.stubEnv('EXA_API_KEY', 'exa-env-key');
+      vi.stubEnv('EXA_BASE_URL', 'https://proxy.example.com/exa');
+      const { getServerWebSearchProviders, resolveWebSearchApiKey, resolveWebSearchBaseUrl } =
+        await import('@/lib/server/provider-config');
+
+      expect(resolveWebSearchApiKey('exa', undefined)).toBe('exa-env-key');
+      expect(resolveWebSearchBaseUrl('exa')).toBe('https://proxy.example.com/exa');
+      expect(getServerWebSearchProviders().exa).toEqual({});
     });
 
     it('ignores client key and base URL for a server-managed Bocha provider', async () => {
@@ -579,6 +603,28 @@ pdf:
       expect(resolveVideoBaseUrl('grok-video')).toBe('https://proxy.example.com/video');
     });
 
+    it('exposes server-pinned image models in getServerImageProviders', async () => {
+      vi.stubEnv('IMAGE_SEEDREAM_API_KEY', 'sk-seedream');
+      vi.stubEnv('IMAGE_SEEDREAM_MODELS', 'doubao-seedream-5.0-lite,doubao-seedream-5.0-pro');
+      const { getServerImageProviders } = await import('@/lib/server/provider-config');
+
+      const providers = getServerImageProviders();
+      expect(providers.seedream).toEqual({
+        models: ['doubao-seedream-5.0-lite', 'doubao-seedream-5.0-pro'],
+      });
+    });
+
+    it('exposes server-pinned video models in getServerVideoProviders', async () => {
+      vi.stubEnv('VIDEO_SEEDANCE_API_KEY', 'sk-seedance');
+      vi.stubEnv('VIDEO_SEEDANCE_MODELS', 'doubao-seedance-2-0,doubao-seedance-3-0');
+      const { getServerVideoProviders } = await import('@/lib/server/provider-config');
+
+      const providers = getServerVideoProviders();
+      expect(providers.seedance).toEqual({
+        models: ['doubao-seedance-2-0', 'doubao-seedance-3-0'],
+      });
+    });
+
     it('activates keyless image providers (lemonade) from a base URL alone', async () => {
       vi.stubEnv('IMAGE_LEMONADE_BASE_URL', 'http://localhost:13305/v1');
       const { getServerImageProviders, resolveImageApiKey, isServerConfiguredProvider } =
@@ -718,6 +764,39 @@ video:
       // section-scoped: an LLM provider id is not a video provider
       expect(isServerConfiguredProvider('video', 'openai')).toBe(false);
     });
+
+    it.each(['constructor', 'toString', '__proto__', 'hasOwnProperty'])(
+      'does not treat the inherited property name %s as a configured provider',
+      async (providerId) => {
+        vi.stubEnv('OPENAI_API_KEY', 'sk-openai');
+        const {
+          isServerConfiguredProvider,
+          resolveApiKey,
+          resolveBaseUrl,
+          resolveProxy,
+          resolveTTSApiKey,
+          resolveASRModel,
+          resolveImageModel,
+          resolveVideoModel,
+          resolveWebSearchModel,
+        } = await import('@/lib/server/provider-config');
+
+        for (const section of ['providers', 'tts', 'asr', 'pdf', 'image', 'video'] as const) {
+          expect(isServerConfiguredProvider(section, providerId)).toBe(false);
+        }
+        // Unmanaged: the client's values are used, not an inherited property.
+        expect(resolveApiKey(providerId, 'client-key')).toBe('client-key');
+        expect(resolveTTSApiKey(providerId, 'client-key')).toBe('client-key');
+        expect(resolveBaseUrl(providerId, 'https://client.example/v1')).toBe(
+          'https://client.example/v1',
+        );
+        expect(resolveProxy(providerId)).toBeUndefined();
+        expect(resolveASRModel(providerId, 'm')).toBe('m');
+        expect(resolveImageModel(providerId, 'm')).toBe('m');
+        expect(resolveVideoModel(providerId, 'm')).toBe('m');
+        expect(resolveWebSearchModel(providerId, 'm')).toBe('m');
+      },
+    );
   });
 
   describe('getServerTTSProviders force-disable (#665)', () => {
@@ -856,6 +935,13 @@ video:
       vi.stubEnv('TAVILY_ENABLED', 'false');
       const { getServerWebSearchProviders } = await import('@/lib/server/provider-config');
       expect(getServerWebSearchProviders()['tavily']).toEqual({ disabled: true });
+    });
+
+    it('web-search: force-disables Exa through EXA_ENABLED=false', async () => {
+      vi.stubEnv('EXA_API_KEY', 'exa-key');
+      vi.stubEnv('EXA_ENABLED', 'false');
+      const { getServerWebSearchProviders } = await import('@/lib/server/provider-config');
+      expect(getServerWebSearchProviders().exa).toEqual({ disabled: true });
     });
 
     it('web-search: force-disables the keyless SearXNG provider via env', async () => {

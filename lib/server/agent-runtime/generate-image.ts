@@ -1,11 +1,9 @@
-import { createHash } from 'node:crypto';
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
-
 import type { AgentTool } from '@earendil-works/pi-agent-core';
+import type { AssetStore } from '@openmaic/storage';
 import { Type, type Static } from 'typebox';
 
 import { generateImage, IMAGE_PROVIDERS } from '@/lib/media/image-providers';
+import { managedMediaProviderFetch } from '@/lib/server/media-provider-fetch';
 import type {
   ImageGenerationConfig,
   ImageGenerationOptions,
@@ -23,14 +21,17 @@ import {
 import { createLogger } from '@/lib/logger';
 import { resolveImageSize } from '@/lib/server/image-sizing';
 import { recordGenerationUsage } from '@/lib/server/usage-storage';
-import { createStrictFetchTransport } from '@/lib/server/strict-fetch';
+import { fetchProviderResultUrl } from '@/lib/server/provider-result-fetch';
 import {
   DownloadByteBudget,
   MAX_REMOTE_IMAGE_BATCH_BYTES,
   MAX_REMOTE_IMAGE_BYTES,
   readResponseBodyWithLimit,
 } from '@/lib/server/bounded-download';
-import { CLASSROOMS_DIR } from '@/lib/server/classroom-storage';
+import {
+  AssetStorageFullError,
+  storeGeneratedAssetOrThrow,
+} from '@/lib/server/store-generated-asset';
 import type { CourseToolDeps } from './course-tools';
 import { COURSE_STAGE_ID_DESCRIPTION } from './course-stage';
 import { errorResult, MEDIA_TOOL_ERROR_REASONS } from './media-tool-result';
@@ -69,23 +70,21 @@ interface PersistImageInput {
   result: ImageGenerationResult;
   stageId: string;
   signal: AbortSignal;
+  /** The run's owner; the bytes are allocated in its asset partition. */
+  ownerId?: string;
 }
 
 type PersistGeneratedImage = (input: PersistImageInput) => Promise<string>;
 
-export interface GenerateImageToolDeps extends Pick<CourseToolDeps, 'sessionId' | 'abortSignal'> {
+export interface GenerateImageToolDeps extends Pick<
+  CourseToolDeps,
+  'sessionId' | 'abortSignal' | 'ownerId'
+> {
   getConfiguredProviders?: typeof getServerImageProviders;
   resolveProviderConfig?: (providerId: ImageProviderId) => ImageGenerationConfig;
   generateConfiguredImage?: GenerateConfiguredImage;
   persistGeneratedImage?: PersistGeneratedImage;
   timeoutMs?: number;
-}
-
-function extensionForMime(mime: string): string {
-  if (mime === 'image/jpeg') return 'jpg';
-  if (mime === 'image/webp') return 'webp';
-  if (mime === 'image/gif') return 'gif';
-  return 'png';
 }
 
 function throwIfAborted(signal?: AbortSignal): void {
@@ -113,56 +112,60 @@ async function imageBytes(
     if (bytes.length > MAX_REMOTE_IMAGE_BYTES) {
       throw new Error(`Generated image exceeds the ${MAX_REMOTE_IMAGE_BYTES}-byte limit`);
     }
-    return { bytes, mime: 'image/png' };
+    // Inline bytes have no `Content-Type` to read, so the adapter that received
+    // them is the one that knows their type. PNG stays the fallback for an
+    // adapter that does not report one.
+    return { bytes, mime: result.mimeType ?? 'image/png' };
   }
   if (!result.url) throw new Error('Image provider returned neither URL nor image bytes');
 
-  const transport = createStrictFetchTransport({
-    allowLocalNetworks:
-      process.env.ALLOW_LOCAL_NETWORKS === 'true' || process.env.ALLOW_LOCAL_NETWORKS === '1',
+  const response = await fetchProviderResultUrl(result.url, {
+    signal,
+    maxBytes: MAX_REMOTE_IMAGE_BYTES,
   });
-  try {
-    const response = await transport.fetch(result.url, { signal });
-    if (!response.ok) throw new Error(`Generated image download failed: HTTP ${response.status}`);
-    const mime = response.headers.get('content-type')?.split(';')[0]?.trim() || 'image/png';
-    if (!mime.startsWith('image/')) {
-      throw new Error(`Generated image download returned unexpected content type: ${mime}`);
-    }
-    const bytes = await readResponseBodyWithLimit(response, {
-      maxBytes: MAX_REMOTE_IMAGE_BYTES,
-      aggregateBudget: new DownloadByteBudget(MAX_REMOTE_IMAGE_BATCH_BYTES),
-    });
-    throwIfAborted(signal);
-    return { bytes, mime };
-  } finally {
-    await transport.close().catch(() => undefined);
+  if (!response.ok) throw new Error(`Generated image download failed: HTTP ${response.status}`);
+  const mime = response.headers.get('content-type')?.split(';')[0]?.trim() || 'image/png';
+  if (!mime.startsWith('image/')) {
+    throw new Error(`Generated image download returned unexpected content type: ${mime}`);
   }
+  const bytes = await readResponseBodyWithLimit(response, {
+    maxBytes: MAX_REMOTE_IMAGE_BYTES,
+    aggregateBudget: new DownloadByteBudget(MAX_REMOTE_IMAGE_BATCH_BYTES),
+  });
+  throwIfAborted(signal);
+  return { bytes, mime };
 }
 
 /**
- * Persist through the same local classroom-media path used by classic mode,
- * returning an origin-independent RELATIVE serving path. The agent runtime has
- * no request to derive an origin from, and the durable value must stay valid
- * regardless of the origin the app is served from; the browser resolves the
- * relative path against the page origin. Classic request-bearing routes build
- * absolute URLs through `resolveMediaServingOrigin` instead.
+ * Store the generated bytes in the asset pool and return the id it allocated.
+ *
+ * The returned value is an `ast_` id, not a URL: the model puts it on an image
+ * element through `patch_stage`, and that document write is what commits the
+ * allocation and records the reference (#1473). Until it happens the entry is
+ * pending and the collector will reclaim it, which is exactly the behaviour a
+ * generation the agent never used should have.
+ *
+ * `assetStore` is a test seam — the historical shape of this function before
+ * #1242 replaced the pool with a local file. Production calls pass nothing and
+ * get this deployment's PostgreSQL store.
  */
-export async function defaultPersistGeneratedImage({
-  result,
-  stageId,
-  signal,
-}: PersistImageInput): Promise<string> {
+export async function defaultPersistGeneratedImage(
+  { result, stageId, signal, ownerId }: PersistImageInput,
+  assetStore?: AssetStore,
+): Promise<string> {
+  if (!ownerId) throw new Error('Generated media cannot be stored without the run owner');
   const { bytes, mime } = await imageBytes(result, signal);
-  const hash = createHash('sha256').update(bytes).digest('hex');
   throwIfAborted(signal);
-
-  const mediaDir = path.join(CLASSROOMS_DIR, stageId, 'media');
-  const filename = `generated-${hash}.${extensionForMime(mime)}`;
-  await fs.mkdir(mediaDir, { recursive: true });
+  const assetId = await storeGeneratedAssetOrThrow({
+    ownerId,
+    stageId,
+    bytes,
+    mimeType: mime,
+    kind: 'image',
+    assetStore,
+  });
   throwIfAborted(signal);
-  await fs.writeFile(path.join(mediaDir, filename), bytes);
-  throwIfAborted(signal);
-  return `/api/classroom-media/${stageId}/media/${filename}`;
+  return assetId;
 }
 
 /**
@@ -192,6 +195,8 @@ export function buildGenerateImageTool(
       apiKey: resolveImageApiKey(providerId),
       baseUrl: resolveImageBaseUrl(providerId),
       model: resolveImageModel(providerId),
+      // Server-configured provider: its base URL is operator configuration.
+      fetchImpl: managedMediaProviderFetch,
     }));
   const callProvider = deps.generateConfiguredImage ?? generateImage;
   const persist = deps.persistGeneratedImage ?? defaultPersistGeneratedImage;
@@ -200,7 +205,7 @@ export function buildGenerateImageTool(
     name: GENERATE_IMAGE_TOOL_NAME,
     label: 'Generate image',
     description:
-      'Create a new image from a prompt, persist it with the explicitly targeted course media, and return a renderable src plus dimensions. Use the returned src in a later patch_stage set of an existing media element, or add an image element with patch_stage. This tool never edits a page itself.',
+      'Create a new image from a prompt, store it with the explicitly targeted course media, and return its src plus dimensions. The src is a stored-asset id, not a URL; use it verbatim in a later patch_stage set of an existing media element, or add an image element with patch_stage. The image is only kept once a page references it. This tool never edits a page itself.',
     parameters: GenerateImageParams,
     async execute(toolCallId, params: Static<typeof GenerateImageParams>, signal) {
       const callerSignal = signal ?? deps.abortSignal;
@@ -309,7 +314,12 @@ export function buildGenerateImageTool(
         });
         throwIfAborted(ioSignal);
 
-        const src = await persist({ result, stageId, signal: ioSignal });
+        const src = await persist({
+          result,
+          stageId,
+          signal: ioSignal,
+          ...(deps.ownerId ? { ownerId: deps.ownerId } : {}),
+        });
         throwIfAborted(ioSignal);
         void recordGenerationUsage({
           kind: 'image',
@@ -326,7 +336,7 @@ export function buildGenerateImageTool(
           content: [
             {
               type: 'text',
-              text: `Generated image: src=${src}, width=${result.width}, height=${result.height}. Use this src with patch_stage set or add an image element.`,
+              text: `Generated image: src=${src}, width=${result.width}, height=${result.height}. src is a stored-asset id; use it verbatim with patch_stage set or add an image element.`,
             },
           ],
           details: {
@@ -337,6 +347,17 @@ export function buildGenerateImageTool(
         };
       } catch (error) {
         if (callerSignal?.aborted) throw new Error('aborted');
+        // A full store is the one failure the model can act on, so it is said
+        // plainly and given its own code. Nothing was written: there is no
+        // local-disk fallback, because a fallback would put the workbench back
+        // on two storage models — the thing this path exists to end.
+        if (error instanceof AssetStorageFullError) {
+          log.warn(`[${toolCallId}] Image generation refused: the asset store is full`);
+          return errorResult(
+            'Image generation failed: asset storage is full, so the generated image could not be stored. Nothing was saved. Ask the operator to raise the asset storage limit or free space, then try again.',
+            { stageId, reason: MEDIA_TOOL_ERROR_REASONS.storageFull },
+          );
+        }
         if (isTimeout(ioSignal)) {
           log.warn(
             `[${toolCallId}] Image generation timed out: provider=${providerId}, model=${model ?? 'default'}, timeoutMs=${deps.timeoutMs ?? GENERATE_IMAGE_TIMEOUT_MS}`,

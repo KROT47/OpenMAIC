@@ -4,6 +4,298 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Breaking Changes
+
+- Server-backed persistence is always on. Courses, folders and folder membership, chat history and learner runtime, and generated media are stored on the server through `/api/persistence`; the browser has no storage backend of its own any more. The build-time `NEXT_PUBLIC_PERSISTENCE` switch is removed (from the client, the Dockerfile and `docker-compose.yml`) and ignored. The server now requires `DATABASE_URL` and exits at startup without it (`[boot] Invalid server configuration; the server will not start: DATABASE_URL is not set. ...`); `pnpm db:up` / `pnpm db:down` start and stop a separate development database (the Compose `postgres` service definition under its own project and volume, `openmaic-dev-db`), published on `127.0.0.1` (`OPENMAIC_DB_PORT`, default `5432`), for local development, and serverless hosts point `DATABASE_URL` at an external PostgreSQL. Only device-local state stays in the browser (settings, playback position, the editor's current scene and undo history, a local cache of media the server already stores, staged PDF images and browser voice profiles), in a new `maic-device-cache` IndexedDB database; **Settings → Clear Local Cache** clears exactly that. Courses an earlier browser-only build stored in the browser are not deleted; the one-way importer below moves them to the server.
+- Docker Compose: `docker compose up` now starts PostgreSQL (no profile) and a server-backed app (`DATABASE_URL` set from `PERSISTENCE_POSTGRES_PASSWORD`) that waits for PostgreSQL to be healthy, in single-user mode (`docker-compose.defaults.env`, read before `.env.local` so it can be overridden there). The app port is published on `127.0.0.1` only; start with `OPENMAIC_PUBLISH_ADDRESS=0.0.0.0` to serve other machines, and set `ACCESS_CODE` then: every visitor is the same single owner. `OPENMAIC_PORT` changes the host port. `--profile server-persistence` is still accepted and does nothing. A `DATABASE_URL` in `.env.local` still wins over the bundled default. Courses an earlier browser-only deployment stored in the browser are not deleted; the one-way importer in this release moves them to the server. Anonymous libraries from an earlier server-backed deployment are not merged into the single owner automatically; claim them explicitly. A `.env.local` that sets `PERSISTENCE_SHARED_OWNER_ID` must also set `OWNER_SINGLE_USER=false`.
+- `@openmaic/storage` 0.34.0: course ownership is no longer recorded on `document_stages`. `PgDocumentStore` never reads or writes `document_stages.owner_id`; an owner-bound store scopes listings, writes, deletes, the freshness manifest and folder membership through the host's ownership relation, named with the new `documentOwnership` option (`{ table, stageIdColumn?, ownerIdColumn?, tombstoneColumn?, claimOnCreate? }`). The relation must cascade with the document rows (`REFERENCES document_stages(id) ON DELETE CASCADE`) or be cleaned alongside them; a leftover ownership row keeps the id reserved for its owner. `documentOwnership: false` turns document scoping off, and on an owner-bound store it requires `allowCrossOwnerDocumentAccess: true`, so binding an owner for folders or asset principals cannot silently expose every owner's documents. `forOwner(ownerId)` (or `ownerId`) without `documentOwnership` now throws at construction instead of silently scoping nothing. A store that is not owner-bound is tenant-agnostic: it lists and writes every document, where it used to see only documents with no owner. `AssetCollector`'s `assetReferencePrincipals` requires `documentOwnership` too, because the backfill reads each document's owner from that relation. A new `folders: false` option lets a host whose own `document_stages` has no `folder_id` column use the store without folders. Fresh installs no longer get the `owner_id` column or its two indexes (`document_stages_owner_idx`, `document_stages_owner_folder_idx`); `document_stages_folder_idx` replaces the latter.
+- Server persistence: `stage_meta` is the only record of who owns a course. At startup, courses whose owner was recorded only on `document_stages.owner_id` are adopted into `stage_meta` (idempotent, logged with a count; where the two records disagree `stage_meta` stands and the disagreement is counted). To roll back to a release that still reads the column, first copy ownership back for courses created since the upgrade: `UPDATE document_stages AS d SET owner_id = m.owner_id FROM stage_meta AS m WHERE m.stage_id = d.id AND d.owner_id IS NULL`.
+
+- Server persistence: runtime sessions (`/api/persistence/runtime/*`) are keyed by the owner the owner identity seam resolves, not by a client-supplied `x-learner-key` behind the development token. `PERSISTENCE_DEV_TOKEN`, `NEXT_PUBLIC_PERSISTENCE_TOKEN` and `PERSISTENCE_ALLOW_INSECURE_DEV_AUTH` are removed and ignored; the browser learns its learner key from `GET /api/persistence/learner-key`. Runtime sessions written before this change were keyed by a browser-minted learner key and are no longer reachable; they are not migrated, because trusting a client-supplied old key would restore client-chosen identity. Course documents and media are unaffected. **If the development token was your only access gate**, put the deployment behind `ACCESS_CODE` or a gateway, or register owner auth methods, before upgrading: without the token the endpoint serves every visitor as their own anonymous owner.
+- Server persistence: assets are allocated in a per-owner partition, so `ASSET_QUOTA_BYTES` is a per-owner ceiling and only the owner can replace or delete an entry. Other owners read an entry by id while a live course of the entry's owner references it, and a document write references and commits only its owner's entries (and legacy ones), so naming another owner's id records nothing. Entries in the old shared partition stay readable by id, and can be replaced or deleted only by an owner who owns every course referencing them.
+
+### Deprecated
+
+- `document_stages.owner_id`: the document store no longer reads or writes it (only the boot backfill reads it, and a claim mirrors the new owner into it while it exists, so a rollback still finds consistent ownership). Existing installations keep the column (made nullable, its default removed) for this release so a rollback still finds it; it will be dropped in the next release.
+
+### Upgrade notes
+
+- Anonymous identities: existing 30-day `anonymous_id` cookies are renewed to 400 days on their next API request, and every response of an owner-scoped route that resolves to an anonymous cookie now carries a `Set-Cookie` renewing it. A browser that loses the cookie (a manual clear, or 400 days without use) gets a new owner, and cannot reach the earlier anonymous library, or a pending legacy import bound to it, from that browser: anonymous identity has no other key. Use single-user mode (the Compose default) for a personal installation, or accounts (owner auth methods) for many users.
+- The first start creates the `owner_merges` table (with the `stage_meta` and owner-material schemas). Nothing is claimed until a claim is triggered; the default trigger is the explicit `POST /api/identity/claim`.
+- The first start on an existing installation changes `document_stages` under table locks. `CREATE INDEX document_stages_folder_idx` builds the new index under a SHARE lock, which blocks writes to `document_stages` for the length of the build. `DROP INDEX` of `document_stages_owner_idx` / `document_stages_owner_folder_idx` takes a brief ACCESS EXCLUSIVE lock. If a host added `NOT NULL` or a default to `owner_id`, `ALTER TABLE ... DROP NOT NULL` / `DROP DEFAULT` also takes ACCESS EXCLUSIVE, which blocks reads too and waits behind any open transaction on the table. Upgrade in a quiet window, or start one instance first and let it finish before the rest start (concurrent starts are serialized anyway; see Bug Fixes). Once done, later starts change nothing.
+- To keep the index build off the start path on a large table, create the index and drop the old ones yourself beforehand, outside a transaction: `CREATE INDEX CONCURRENTLY IF NOT EXISTS document_stages_folder_idx ON document_stages (folder_id, id) WHERE folder_id IS NOT NULL;`, `DROP INDEX CONCURRENTLY IF EXISTS document_stages_owner_idx;`, `DROP INDEX CONCURRENTLY IF EXISTS document_stages_owner_folder_idx;`. The start then builds and drops nothing. It still takes and releases the same momentary SHARE lock that every other `CREATE INDEX IF NOT EXISTS` in the schema takes on each start.
+
+### Features
+
+- One-way import of browser data from earlier builds (temporary). On the first load after the upgrade, once the page is idle, the client moves what an earlier build kept in the browser to the server, for the owner the server resolves: courses from the browser document store and the original tables with their chat, learner runtime, playback position, agent roster, folders and membership, pre-runtime quiz state and media; media bytes of server courses from earlier opt-in server builds that only the old browser tables hold; and device-only rows (generation failure records, bytes a full store refused, auto-voice reference clips) into the device cache. It runs once per browser: the server binds the browser's random id to the first owner that asks (the new `legacy_import_bindings` table and `POST /api/identity/legacy-import-binding`, an atomic insert that answers only whether the requesting owner holds the browser), a claim carries the binding to the account (a new claim participant), and owner resolution refuses every importer request (`X-OpenMAIC-Legacy-Import`) of an owner that does not hold the binding with `409 LEGACY_IMPORT_NOT_BOUND`; any other owner later using the same browser gets nothing imported. It is automatic and silent (problems are logged under `[legacy-browser-import]`), never writes to the old browser storage, keeps one ledger per browser (a random browser id and no owner information) so it resumes after an interruption and never imports twice (Clear Local Cache keeps it, and keeps the pre-runtime quiz keys until the import is complete), and serializes tabs with Web Locks. A course the owner already has on the server stays as the server has it; one whose id another owner holds is imported under a new id derived from the browser id; one deleted on the server stays deleted. Transient failures and 401s are retried on later loads with backoff; when the asset store is full the course is imported anyway and its media waits where the app's own retry finds it; media the server refuses for good shows the ordinary failed-media state (without Retry when nothing could regenerate it). A course the old browser storage cannot read holds up only what it could affect, and settles after five failing runs over a day (the older table copy when there is one, otherwise skipped with the reason). A browser whose data another owner holds asks the server again only every ten minutes, and opens the old databases only once it is bound. The module (`lib/legacy-browser-import/`) will be removed a few releases later; its README lists the steps.
+
+- Owner identity: a built-in `singleUser` owner for personal installations. `OWNER_SINGLE_USER=true` resolves every request to one owner (`OWNER_SINGLE_USER_ID`, default `local`) with `kind: 'user'` and `course:publish`, minting no anonymous cookie; the principal gets a claim candidate from an anonymous cookie the browser still carries, so earlier anonymous work can be claimed into it explicitly (`POST /api/identity/claim`; `OWNER_CLAIM_TRIGGER=auto` would merge every visiting browser's anonymous library, so it is not a default). It runs with or without `ACCESS_CODE`; without one the server logs one prominent startup warning (in place of the generic unset-`ACCESS_CODE` warning) that anyone who can reach it shares, edits and can delete the single library. It excludes `PERSISTENCE_SHARED_OWNER_ID`; hosts may register `singleUserAuthMethod()` last, under the same rules as `sharedTeamAuthMethod()`. Malformed values fail startup. The app warns at startup when published beyond loopback (`OPENMAIC_PUBLISH_ADDRESS`, which the Compose file passes to it) with the Compose default PostgreSQL password.
+- Owner identity: one resolution entry point with composable auth methods. A host registers an ordered list of `OwnerAuthMethod`s once from `instrumentation.ts` with `configureOwnerAuthentication({ methods, anonymousFallback? })` (single-shot, sealed on first use, validated at boot). Each method answers `authenticated`, `not-applicable` (no credential of its kind) or `invalid` (its credential is present but bad); core keeps the first `authenticated` answer, refuses any `invalid` answer with `401 INVALID_CREDENTIAL` without asking later methods, and when no method applies falls back to the anonymous cookie owner, or answers `401` with `anonymousFallback: false`. Route handlers and Server Actions ask the same methods in the same order, once per request. `PERSISTENCE_SHARED_OWNER_ID` still selects the `sharedTeam` owner on its own; beside host methods it is kept by listing `sharedTeamAuthMethod()` last, and setting the variable while a registration leaves it out fails startup. Identity gateways are covered by a documented recipe (a host method that verifies the gateway's signed JWT against the identity provider's keys), not by a built-in. Host methods live in `lib/server/identity/host/`, the only place the boundary test lets code read gateway identity headers or an incoming `Authorization` header. On `403 OWNER_RETIRED`, core calls `clearCredential` only on the anonymous fallback and on methods that declare `issuesAnonymousOwners: true`, never on an account method. The unreleased `OWNER_AUTHENTICATOR` / `TRUSTED_PROXY_*` variables of an earlier built-in gateway-header authenticator fail startup when set.
+- Owner identity: claiming anonymous work into an account. When a host auth method authenticates a non-anonymous principal and the same request also carries a valid anonymous owner cookie, core attaches a `pendingClaim` naming that anonymous owner (never for an anonymous principal or the built-in `sharedTeam`, and a method cannot set one itself), which covers both an anonymous-then-sign-in flow and a deployment moving from anonymous use to accounts. `POST /api/identity/claim` (same-origin JSON only; `OWNER_CLAIM_TRIGGER=auto` claims on the first request carrying a pending claim, except the explicit claim routes) moves the anonymous owner's folders, courses, materials, agent sessions, skills, runtime sessions and asset entries to the account in one transaction, records it in the new `owner_merges` table, and drops the anonymous cookie. Same-named folders merge, a folder id the account already uses is renumbered, a colliding skill handle gets the first free numeric suffix, runtime sessions are re-keyed as stored, and quotas are not applied to what moves. Claims are idempotent per pair, refused for an anonymous owner another account already claimed, and never chain. A retired anonymous id writes nothing afterwards: creates and writes through `/api/persistence`, the folder, course, material and skill routes, and writes by id to moved rows answer `403 OWNER_RETIRED`, with a `Set-Cookie` that drops the retired cookie. Agent runs, generated media and skills created by a run that started before the claim follow it to the account. Every owner write takes a per-owner advisory lock first, so a fenced write racing a claim is moved or refused; lock waits are bounded (`OWNER_CLAIM_LOCK_WAIT_MS`, `OWNER_WRITE_LOCK_WAIT_MS`) and running out answers `503 OWNER_BUSY` with `Retry-After`. The anonymous cookie is a bearer credential: its holder can claim that anonymous work into a signed-in account, so clear it on shared devices. Hosts add their own tables with `registerClaimParticipant`, and an auth method may implement `describeStoredOwner` and `clearCredential`; `principalFromStoredOwner(ownerId)` describes a stored id for work without a request. The runtime contract's `POST /runtime/learners/merge` now performs the same claim, allowed only from the request's own pending claim. The owner-events stream tells a retired owner only that it moved, never the account's id.
+- `@openmaic/storage` 0.35.1: `reassignDocumentFolders(tx, { fromOwnerId, toOwnerId, documentOwnership })` moves one owner's folders and filing to another (merging same-named folders, renumbering colliding ids); `PgAssetStore.reassignPrincipal(fromKey, toKey)` moves a principal's entries under both principals' write locks; `PgUserSkillStore.mergeOwner(from, to)` moves skills, renaming a handle the target holds to one neither side holds; `PgRuntimeStore.reassignLearner(from, to)` re-keys sessions without re-validating them. `PgUserSkillStore` (`resolveFinalOwner`) and `PgRuntimeStore` (`resolveFinalLearner`) take a hook that runs as the create transaction's first statement. Every HTTP handler (runtime, documents, assets) now answers a `DocumentWriteRefusedError` as `403` with its code, and the new `StorageBusyError(code, message, retryAfterSeconds)` as `503` with its code and `Retry-After`. `PgUserSkillStore.list` orders ties by id.
+- Server persistence: host extension hooks, registered once from `instrumentation.ts` next to the owner auth methods and sealed on first use. `configurePersistenceHooks` adds `authorizeCreate` / `onCreate` (run once per created course inside its transaction; a refusal answers `403 CREATE_REFUSED` and a throw rolls the create back), a `library` provider for what `GET /api/stages` lists (never an id the read path would refuse), and `beforeAssetAllocate` (refuse an upload, `create` or `replace`, with any `Response` before bytes are stored or quota counted). Hooks receive an `actor` whose `source` is `'request'` (with the resolved principal) or `'background'` (an agent run; a refusal reaches the agent as a fixed message). `configureAssetByteStore` replaces the `ASSET_S3_BUCKET` switch for the request path and the asset collector alike; under `ASSET_BYTE_EGRESS=redirect` a store that does not declare `signsReadUrls` stops the server at boot. Nothing changes when no hook is registered.
+- `@openmaic/storage` 0.33.0: `DocumentWriteRefusedError(stageId, code, message)` lets a store refuse a write as policy; the document HTTP handler answers `403` with the error's code and applies nothing. `isDocumentWriteRefusedError` also recognizes one thrown by another copy of the package, by name and shape.
+- Server persistence: `ServerPersistenceProvider` (`lib/persistence/server-provider.ts`) no longer exposes an unscoped `documentStore`, which wrote courses with no owner check and no host hooks. Use the owner-bound store (`createOwnerBoundDocumentStore`, or `getOwnerScopedDocumentStore`).
+- Owner identity: `POST /api/chat/pi` answers `401` when owner resolution refuses the request, like every other owner-resolving route, instead of continuing without an owner. Under the default anonymous fallback nothing changes.
+
+### Bug Fixes
+
+- Owner identity: a browser's first load establishes one anonymous owner. The page response now sets the `anonymous_id` cookie (same value format and attributes as before) when the request carries no valid one and neither `OWNER_SINGLE_USER` nor `PERSISTENCE_SHARED_OWNER_ID` is set, so the page's concurrent first API requests no longer each mint an owner and overwrite one another's cookie; a valid cookie is never replaced. `POST /api/identity/legacy-import-binding` binds only an owner the browser already presented (a request that minted its owner answers `409 OWNER_NOT_ESTABLISHED` and the importer retries on a later load), so the legacy import can no longer be bound to an owner whose cookie a later response replaced and then stall with `409 LEGACY_IMPORT_NOT_BOUND`. `OWNER_ANONYMOUS_PREMINT=false` turns page minting off (default on; a malformed value fails startup). Set it only when registered owner auth methods set `anonymousFallback: false`, and the server warns at startup when such a registration leaves it on; hosts that keep anonymous visitors keep it and skip it per request in `middleware.ts` for requests their methods authenticate (see "Registering methods" in the README).
+- Owner identity: the anonymous identity lasts 400 days (the longest browsers keep a cookie) instead of 30, and is renewed while in use: every route handler and Server Action response that resolves to a valid anonymous cookie re-sends the same value with a fresh `Max-Age`, so an active visitor no longer loses the whole library 30 days after the first visit. Page responses do not renew it, so pages stay cacheable, and a response that clears the cookie (a claim, a retired owner) never renews it.
+- Server persistence: the course library and folders work without the agent runtime. `/api/stages/**` (list, create, read, save, delete, manifest, scenes, freshness, status, generation-complete, publish, unpublish) and `/api/folders/**` now gate on `DATABASE_URL` alone instead of also requiring `OPENMAIC_AGENT_RUNTIME_ENABLED`, so a deployment with server persistence and the runtime off no longer answers `404` there and shows an empty, unavailable library. Agent routes (`/api/agent/**`, `/api/skills/**`, `/api/materials/**`) still require the runtime, and without a `DATABASE_URL` everything answers `404` as before. `GET /api/agent/runtime` also reports `persistence`.
+- Startup: a configuration refused by the boot validation in `instrumentation.ts` (a malformed `ASSET_QUOTA_BYTES`, `ASSET_PENDING_TTL_MS`, `OWNER_WRITE_LOCK_WAIT_MS` or `OWNER_CLAIM_LOCK_WAIT_MS`; an `OWNER_CLAIM_TRIGGER` other than `explicit` / `auto`; the removed `OWNER_AUTHENTICATOR` / `TRUSTED_PROXY_*` variables; a malformed `PERSISTENCE_SHARED_OWNER_ID`, one without `ACCESS_CODE` or beside a registration that leaves out `sharedTeamAuthMethod()`, or `sharedTeamAuthMethod()` registered without it or not last; `ASSET_S3_BUCKET` beside a registered asset byte store, or `ASSET_BYTE_EGRESS=redirect` with a byte store that does not declare `signsReadUrls`) now exits the Node.js server with code `1` after one `[boot] Invalid server configuration` line carrying the original message. Any other boot failure (a module missing from the build, a host registration call that throws) also exits with code `1`, printed as `[boot] Server startup failed` with its stack. Previously the server logged "Failed to prepare server", kept listening, and answered every request with `500`. Warnings never stop the server.
+- Server persistence: two concurrent creates of one new course id by the same owner no longer refuse the second as `reserved-document`: creates of one id take turns, and the second saves as an update without running the create hooks again.
+- Server persistence: instances starting at the same time against one database no longer fail schema setup on a catalog race (`duplicate key value violates unique constraint "pg_class_relname_nsp_index"` / `pg_type_typname_nsp_index`, `tuple concurrently updated`), which made an instance's first request answer `500`. Every schema bootstrap (documents, `stage_meta` and its ownership backfill, owner materials, assets, runtime, agent sessions, session materials, user skills, and the asset collector's) now runs under one PostgreSQL advisory lock held on a dedicated connection.
+
+### Security
+
+- Server persistence: operations on one owner-bound document store no longer share mutable state, so concurrent calls on a store an agent run shares with its tools each gate their own stage; `create_stage` also runs sequentially within a tool batch.
+- Server persistence: runtime data of a deleted course reads as absent and takes no new writes, however the request path is spelled.
+- `@openmaic/storage` 0.32.0: `PgDocumentStore` takes `assetReferencePrincipals` (and `AssetCollector` a matching per-owner function) so a document write can no longer commit or pin another principal's asset entry; a store can refuse `createSession` with `RuntimeStageNotFoundError` (`404 STAGE_NOT_FOUND`); and a session create over a taken id answers `409 SESSION_ALREADY_EXISTS` whoever holds it, instead of `403` for another learner's session.
+
+## [1.1.2] - 2026-09-28
+
+A security release. Server-side requests to provider URLs that a caller can choose now connect only to the addresses that passed validation and refuse redirects, and error responses no longer carry provider response bodies or connection details. Read **Behavior Changes** before upgrading.
+
+### Security
+
+- Provider connections: when a provider is not configured on the server, the settings UI can supply its own base URL, endpoint or model. Several routes validated such a URL once and then connected with a transport that resolved DNS again or followed redirects: PDF parsing and connectivity checks, the Azure voice list, model listing, image and video providers, and LLM calls. Some of these routes also echoed provider response bodies or connection errors back to the caller. This allowed requests to internal addresses and probing of internal services. These requests now go through the strict provider transport, which pins every connection to validated addresses and refuses redirects. IP-literal hosts and the built-in default URLs of unmanaged providers are held to the same policy. Caller-facing errors are fixed text. Client-supplied AliDocMind endpoints must be official hosts. [GHSA-g87c-cm4q-cw5x](https://github.com/THU-MAIC/OpenMAIC/security/advisories/GHSA-g87c-cm4q-cw5x) [#1704](https://github.com/THU-MAIC/OpenMAIC/pull/1704)
+- Classroom media generation downloads provider-returned image and video URLs through the strict provider transport: HTTPS public addresses only, `data:` URLs decoded locally, and size bounded while streaming [#1692](https://github.com/THU-MAIC/OpenMAIC/pull/1692) (by @Yi-111-a). Agent-runtime image and video tools now do the same [#1704](https://github.com/THU-MAIC/OpenMAIC/pull/1704).
+
+### Behavior Changes
+
+- A caller-supplied LLM, image/video, model-list, PDF-check or self-hosted MinerU base URL that answers with a redirect is refused instead of followed. Configure the final URL.
+- A caller-supplied provider base URL containing a query string or fragment is refused.
+- A caller-chosen loopback or private address, including an IP literal or an unmanaged provider's built-in `localhost` default (Ollama, Lemonade, VoxCPM), needs `ALLOW_LOCAL_NETWORKS`. Configure the provider on the server to keep it operator-managed.
+- Server-configured providers (LLM, image/video, TTS/ASR, MinerU, MinerU Cloud) may use local network addresses without `ALLOW_LOCAL_NETWORKS`. Cloud metadata and reserved ranges stay blocked, and redirects from them follow `ALLOW_LOCAL_NETWORKS`.
+- A client-supplied AliDocMind endpoint must be an official `docmind-api.<region>.aliyuncs.com` host over HTTPS; other endpoints answer `403 INVALID_URL`. Server-configured endpoints are unchanged.
+- Provider check and generation errors are fixed messages without the provider's response text or connection errors:
+  - `/api/verify-pdf-provider` success no longer includes `status`;
+  - `/api/azure-voices` answers provider failures with `502`;
+  - `/api/provider/probe-models` reports other HTTP failures as `502` with the status class only;
+  - LLM errors for a client-selected endpoint read `Cannot connect to API: connection failed` (or `request timed out`, `redirects are not allowed`) or the HTTP reason phrase;
+  - MinerU Cloud errors report the HTTP status or numeric code.
+- Agent-runtime video and poster downloads require HTTPS.
+- Pinned provider requests connect directly and do not use Node's environment proxy (`NODE_USE_ENV_PROXY` with `HTTP_PROXY`/`HTTPS_PROXY`).
+- A provider id that names an inherited object property (such as `constructor`) is no longer treated as server-configured.
+
+## [1.1.1] - 2026-09-27
+
+A security release: MinerU Cloud document parsing now holds the upload and result URLs returned by the provider to the strict public address policy, validates every redirect hop, and bounds what it reads and decompresses.
+
+### Security
+
+- MinerU Cloud parsing fetched the presigned upload URL and the result ZIP URL taken from the provider's response with a plain fetch, so when a caller supplied its own MinerU base URL (the provider not configured on the server), its endpoint could steer the server's `PUT` of the uploaded document and the result download at internal addresses. Every MinerU Cloud request now goes through the strict provider transport (per-hop redirect validation and DNS pinning); the response-supplied upload and ZIP URLs must be HTTPS public addresses under every policy, the upload no longer follows redirects, address-policy refusals are not retried, and JSON, ZIP and decompressed entry sizes are bounded. The shared SSRF guard also classifies IPv4-compatible IPv6 addresses (`::/96`) by their embedded IPv4 [GHSA-cpjc-vgjh-c5jp](https://github.com/THU-MAIC/OpenMAIC/security/advisories/GHSA-cpjc-vgjh-c5jp) (reported by @AbelWangYaBo) [#1688](https://github.com/THU-MAIC/OpenMAIC/pull/1688)
+
+## [1.1.0] - 2026-09-24
+
+Classroom chat now runs on an agent loop by default: learners can point at a slide element, an interactive component or a whiteboard drawing and ask about it, and the teacher can read the lesson, check the live state of an interactive experiment and search the web before answering. Settings are reorganized around the course workflow, with a model choice per generation step and first-class Token Plan connections (TokenDance, MiniMax, Seed and Kimi). Read **Behavior Changes** before upgrading.
+
+### Highlights
+
+- **Pi classroom chat is the default.** The in-class conversation moves from the director graph to an agent loop that can read slides on demand, search the web and call classroom tools within a single answer [#1628](https://github.com/THU-MAIC/OpenMAIC/pull/1628) [#1637](https://github.com/THU-MAIC/OpenMAIC/pull/1637)
+- **Ask about what you're looking at.** Reference a single PPT element, an interactive component or a whiteboard element from the playback bar and ask about it; interactive pages that declare state are sampled at question time, so the teacher can explain the result the learner is actually seeing, and `read_scene` exposes an interactive page's static instructions [#1508](https://github.com/THU-MAIC/OpenMAIC/pull/1508) [#1632](https://github.com/THU-MAIC/OpenMAIC/pull/1632) [#1656](https://github.com/THU-MAIC/OpenMAIC/pull/1656)
+- **Settings, rebuilt around the course workflow.** Choose a model for each generation step (outline, slides, interactive pages, scene actions and more), toggle each capability on or off, and manage Token Plans in one place [#1644](https://github.com/THU-MAIC/OpenMAIC/pull/1644)
+- **Token Plans.** One-key presets for TokenDance (every modality) and the Kimi Coding Plan (text only; other modalities stay on your own providers) [#1525](https://github.com/THU-MAIC/OpenMAIC/pull/1525) [#1664](https://github.com/THU-MAIC/OpenMAIC/pull/1664)
+
+### Features
+
+- Models: add OpenRouter image and video providers [#1356](https://github.com/THU-MAIC/OpenMAIC/pull/1356), Gemini 3.8 Flash and 3.7 Flash [#1629](https://github.com/THU-MAIC/OpenMAIC/pull/1629), and Xiaomi MiMo V2.6 [#1655](https://github.com/THU-MAIC/OpenMAIC/pull/1655)
+- TTS: pace classroom narration requests and classify MiniMax RPM limits so rate-limited runs slow down instead of failing [#1650](https://github.com/THU-MAIC/OpenMAIC/pull/1650); auto-detect Vietnamese for browser-native narration [#1487](https://github.com/THU-MAIC/OpenMAIC/pull/1487)
+- Storage: workbench image and video generation write through the asset pool (#1007 part 6) [#1524](https://github.com/THU-MAIC/OpenMAIC/pull/1524); ZIP imports persist media in the server asset pool [#1520](https://github.com/THU-MAIC/OpenMAIC/pull/1520)
+- Persistence: optional single-tenant mode that resolves every request to one shared owner (`PERSISTENCE_SHARED_OWNER_ID`) [#1639](https://github.com/THU-MAIC/OpenMAIC/pull/1639)
+- Render service: admission control and per-task resource budgets [#1492](https://github.com/THU-MAIC/OpenMAIC/pull/1492)
+- Attribution: TokenDance gateway requests carry an `X-APP-URL` header identifying the OpenMAIC deployment [#1675](https://github.com/THU-MAIC/OpenMAIC/pull/1675)
+
+### Bug Fixes
+
+- Generation: reject quiz options whose values are not A–Z and constrain them at the source [#1651](https://github.com/THU-MAIC/OpenMAIC/pull/1651); reject unusable interactive scripts and surface runtime errors on the page [#1649](https://github.com/THU-MAIC/OpenMAIC/pull/1649); keep narration speech free of formulas and LaTeX [#1586](https://github.com/THU-MAIC/OpenMAIC/pull/1586); tolerate non-array `mediaGenerations` in outlines [#1469](https://github.com/THU-MAIC/OpenMAIC/pull/1469); add a browser-safe package entry [#1609](https://github.com/THU-MAIC/OpenMAIC/pull/1609); stabilize model picker teardown [#1618](https://github.com/THU-MAIC/OpenMAIC/pull/1618)
+- Playback and audio: mobile narration survives past the first segment and discussion lines reuse one media element [#1477](https://github.com/THU-MAIC/OpenMAIC/pull/1477) [#1610](https://github.com/THU-MAIC/OpenMAIC/pull/1610); stop superseded scene engines [#1510](https://github.com/THU-MAIC/OpenMAIC/pull/1510); queue widget messages until the iframe is ready [#1532](https://github.com/THU-MAIC/OpenMAIC/pull/1532); resolve CDN-backed narration consistently [#1521](https://github.com/THU-MAIC/OpenMAIC/pull/1521); keep refused narration instead of re-billing it [#1523](https://github.com/THU-MAIC/OpenMAIC/pull/1523); derive the Azure SSML locale from the selected voice [#1566](https://github.com/THU-MAIC/OpenMAIC/pull/1566); rebuild FormData bodies for the undici transport [#1580](https://github.com/THU-MAIC/OpenMAIC/pull/1580)
+- PPTX import and editor: preserve tab columns, text insets, arrows, text/chart/image styling, shape autofit, Wingdings checkmarks, diagonal corners, table typography and punctuation wrapping; include every color attribute in the style cache key; share line bounds for alignment and dragging; bound ZIP inflation by default [#1518](https://github.com/THU-MAIC/OpenMAIC/pull/1518) [#1534](https://github.com/THU-MAIC/OpenMAIC/pull/1534) [#1577](https://github.com/THU-MAIC/OpenMAIC/pull/1577) [#1581](https://github.com/THU-MAIC/OpenMAIC/pull/1581) [#1571](https://github.com/THU-MAIC/OpenMAIC/pull/1571) [#1631](https://github.com/THU-MAIC/OpenMAIC/pull/1631) [#1588](https://github.com/THU-MAIC/OpenMAIC/pull/1588)
+- Media and web search: refuse redirects on adapter generation and poll calls [#1636](https://github.com/THU-MAIC/OpenMAIC/pull/1636); keep long Grok relay generations alive and inline image bytes [#1364](https://github.com/THU-MAIC/OpenMAIC/pull/1364); emit keyframe images as data URLs [#1444](https://github.com/THU-MAIC/OpenMAIC/pull/1444); stop leaking Brave's HTML challenge page into errors [#1553](https://github.com/THU-MAIC/OpenMAIC/pull/1553); bound the model-discovery response body timeout [#1478](https://github.com/THU-MAIC/OpenMAIC/pull/1478)
+- Export: surface video render rejection reasons [#1414](https://github.com/THU-MAIC/OpenMAIC/pull/1414); include active line geometry in bounds [#1626](https://github.com/THU-MAIC/OpenMAIC/pull/1626)
+- Server and storage: validate `pdfContent` input [#1578](https://github.com/THU-MAIC/OpenMAIC/pull/1578); sanitize agent session text [#1504](https://github.com/THU-MAIC/OpenMAIC/pull/1504); correlate 5xx responses with request IDs [#1601](https://github.com/THU-MAIC/OpenMAIC/pull/1601); warn when access-code protection is disabled [#1599](https://github.com/THU-MAIC/OpenMAIC/pull/1599); show effective upload limits in errors [#1418](https://github.com/THU-MAIC/OpenMAIC/pull/1418)
+- Docker: create `/app/data` owned by the runtime user so classroom persistence works [#1442](https://github.com/THU-MAIC/OpenMAIC/pull/1442); build workspace packages in the builder stage [#1598](https://github.com/THU-MAIC/OpenMAIC/pull/1598)
+- Misc: send `taskEngineMode` on the on-demand vocational scene path [#716](https://github.com/THU-MAIC/OpenMAIC/pull/716); POSIX zip entry names for exported skills on Windows [#1641](https://github.com/THU-MAIC/OpenMAIC/pull/1641); i18n and persistence fixes [#1595](https://github.com/THU-MAIC/OpenMAIC/pull/1595) [#1596](https://github.com/THU-MAIC/OpenMAIC/pull/1596)
+
+### Behavior Changes
+
+- **Pi is the default classroom chat runtime.** To keep the legacy director-graph chat, build with `NEXT_PUBLIC_PI_CHAT_ENABLED=false` [#1628](https://github.com/THU-MAIC/OpenMAIC/pull/1628)
+- **Stricter generated content.** Quizzes whose option values are not A–Z and interactive pages with unparseable scripts are now rejected as invalid model output and retried or skipped by the existing path, instead of being saved broken [#1651](https://github.com/THU-MAIC/OpenMAIC/pull/1651) [#1649](https://github.com/THU-MAIC/OpenMAIC/pull/1649)
+- **Settings layout.** The web-search toggle moved from the generation toolbar into Settings; an existing preference is migrated once on first load [#1644](https://github.com/THU-MAIC/OpenMAIC/pull/1644)
+- **Courseware references are opt-in.** The playback-bar reference entry (PPT, interactive and whiteboard) is enabled with `NEXT_PUBLIC_COURSEWARE_REFERENCE_ENABLED=true` [#1656](https://github.com/THU-MAIC/OpenMAIC/pull/1656)
+
+### Other Changes
+
+- Docs: align security and behavior claims with shipped code, and document the Docker builder heap limit [#1592](https://github.com/THU-MAIC/OpenMAIC/pull/1592) [#1607](https://github.com/THU-MAIC/OpenMAIC/pull/1607)
+- Refactors and CI: shared per-course session lifecycle, shared narration walk for export, MIME policy from the format registry, Node 24 publish actions, Windows-safe media tests [#1619](https://github.com/THU-MAIC/OpenMAIC/pull/1619) [#1621](https://github.com/THU-MAIC/OpenMAIC/pull/1621) [#1590](https://github.com/THU-MAIC/OpenMAIC/pull/1590) [#1569](https://github.com/THU-MAIC/OpenMAIC/pull/1569) [#1584](https://github.com/THU-MAIC/OpenMAIC/pull/1584) [#1615](https://github.com/THU-MAIC/OpenMAIC/pull/1615)
+
+### Contributors
+
+Thanks to the community contributors in this release: @AbelWangYaBo, @acse-bq23, @Ai-Eastern, @BeAIcoder, @Cham1229, @ciclou1, @dajiaohuang, @Duang777, @Hosuke, @HuntercodeT, @hydraxman, @LeoParkerOu, @lianglaibin116-cloud, @ly-wang19, @mianbaofang, @nqthiep, @PassCode023, @puxiao, @Qnh233, @ttkm2023, @WizKid1968, @YizukiAme, @zdnemz.
+
+## [1.0.3] - 2026-09-15
+
+A security release: access-code tokens now expire and verification is throttled behind a trusted proxy, the render service applies a network policy to the untrusted HTML it renders, audio provider requests validate redirects and pin their connections, and Next.js is upgraded to patch a critical RCE. It also carries the fixes and features merged since 1.0.2.
+
+### Security
+
+- Access-code verification tokens (`timestamp.HMAC`) never expired because neither verifier checked the timestamp, and `POST /api/access-code/verify` had no throttling. Both verifiers now enforce a 7-day server-side lifetime and reject non-canonical signatures, and verification is rate-limited per client when `TRUST_PROXY_HEADERS=true` (with a warning to use a long random `ACCESS_CODE` when it is short) [GHSA-qpmr-534w-hhpg](https://github.com/THU-MAIC/OpenMAIC/security/advisories/GHSA-qpmr-534w-hhpg) (reported by @CaptBoykin) [#1513](https://github.com/THU-MAIC/OpenMAIC/pull/1513)
+- The render service ran caller-supplied HTML in headless Chromium without the packager's Content-Security-Policy on the `/preview` and `/render` paths, so inline script could reach loopback and internal addresses and, on `/render`, paint the response into the returned MP4. Both paths now inject a first-parsed CSP, the preview frame is additionally guarded by request interception, and framed same-origin `.svg`/`.xhtml` documents are sanitized [GHSA-vqq3-22q7-289w](https://github.com/THU-MAIC/OpenMAIC/security/advisories/GHSA-vqq3-22q7-289w) (reported by @CaptBoykin) [#1512](https://github.com/THU-MAIC/OpenMAIC/pull/1512)
+- Audio provider requests (TTS, ASR, voice registration and voice cloning) validated a client-supplied base URL once and then followed redirects and re-resolved DNS unvalidated, so a redirect or a rebinding answer could reach an internal address. These requests now validate every redirect hop and connect only to the addresses the guard validated, on every hop [GHSA-9p8q-rcmg-pmjw](https://github.com/THU-MAIC/OpenMAIC/security/advisories/GHSA-9p8q-rcmg-pmjw) (reported by @CaptBoykin) [#1514](https://github.com/THU-MAIC/OpenMAIC/pull/1514)
+- Upgrade Next.js from 16.2.11 to 16.3.3, which patches an unauthenticated remote code execution on Windows-hosted servers ([GHSA-p293-qw3h-jr36](https://github.com/vercel/next.js/security/advisories/GHSA-p293-qw3h-jr36) / CVE-2026-75604) [#1503](https://github.com/THU-MAIC/OpenMAIC/pull/1503)
+
+### Features
+
+- Storage: the server owns the asset entry lifecycle and releases assets on course deletion (the #1007 amendment) [#1472](https://github.com/THU-MAIC/OpenMAIC/pull/1472) [#1473](https://github.com/THU-MAIC/OpenMAIC/pull/1473)
+- Skills: add an inquiry-based exercise-class teaching skill grounded in the zone of proximal development [#1382](https://github.com/THU-MAIC/OpenMAIC/pull/1382)
+
+### Bug Fixes
+
+- Importer: resolve embedded PPTX videos when the legacy link points at NULL, and upload video posters through the configured callback (`@openmaic/importer` 0.2.1) [#1507](https://github.com/THU-MAIC/OpenMAIC/pull/1507)
+- Storage: keep jsonb writes valid when model output contains NUL or lone surrogates [#1499](https://github.com/THU-MAIC/OpenMAIC/pull/1499); allow one owner material to be bound to multiple sessions [#1500](https://github.com/THU-MAIC/OpenMAIC/pull/1500)
+- Classroom: render a transient server error as a retryable state instead of the terminal "course does not exist" card, on both the pane and the standalone route [#1485](https://github.com/THU-MAIC/OpenMAIC/pull/1485)
+- Upload: resolve the generic Office MIME (`application/vnd.ms-office`) via the filename extension [#1498](https://github.com/THU-MAIC/OpenMAIC/pull/1498)
+- Settings: maintain the ASR language state invariant on provider selection [#1443](https://github.com/THU-MAIC/OpenMAIC/pull/1443)
+- TTS: treat a custom provider's Add-dialog default base URL as a configured credential path so generation narration is not skipped [#1482](https://github.com/THU-MAIC/OpenMAIC/pull/1482)
+- Export: tolerate malformed authored CSS in classroom exports instead of dropping later assets [#1422](https://github.com/THU-MAIC/OpenMAIC/pull/1422)
+- Render service: preserve plan audio during chunk assembly [#1358](https://github.com/THU-MAIC/OpenMAIC/pull/1358)
+- Docker: enable the Pro workbench flag in Docker builds and allow a non-TLS localhost cookie [#1484](https://github.com/THU-MAIC/OpenMAIC/pull/1484)
+
+### Other Changes
+
+- Docs: document the deployment assumptions and pre-report checks in the security policy [#1511](https://github.com/THU-MAIC/OpenMAIC/pull/1511)
+- Tests: isolate the image URL-guard test environment so it no longer inherits the generic OpenAI fallback [#1476](https://github.com/THU-MAIC/OpenMAIC/pull/1476)
+
+## [1.0.2] - 2026-09-14
+
+A security release that closes a cloud-metadata SSRF gap, a DNS-rebinding bypass
+on media proxying, and a classroom overwrite, and tightens two request paths —
+read the Breaking Changes section first.
+
+### Security
+
+- `/api/proxy-media` and the outbound URL guard accepted the Alibaba Cloud
+  instance-metadata address `100.100.100.200` because the metadata denylist was
+  not applied before an IP literal was accepted. The guard now checks metadata
+  hostnames and addresses — including mapped and transition encodings — before
+  the literal and local-network branches, in every environment and regardless of
+  `ALLOW_LOCAL_NETWORKS`
+  [GHSA-6xff-rgjg-v33f](https://github.com/THU-MAIC/OpenMAIC/security/advisories/GHSA-6xff-rgjg-v33f) (reported by @lihua666a-cell)
+- `/api/proxy-media` validated a hostname and then let `fetch()` resolve it
+  again at connect time, so a name whose answer changed between the two lookups
+  could reach an internal address (DNS rebinding). The proxy now connects only
+  to the addresses the guard validated, on every redirect hop, through a shared
+  pinned dispatcher
+  [GHSA-23xq-m3mm-3j49](https://github.com/THU-MAIC/OpenMAIC/security/advisories/GHSA-23xq-m3mm-3j49) (reported by @ry2811)
+- `POST /api/classroom` accepted a caller-chosen classroom id and renamed a
+  temporary file over an existing classroom, replacing its content. Ids are now
+  server-generated and classroom files are created exclusively, with a bounded
+  retry and a 409 on collision
+  [GHSA-87m4-6c66-pc68](https://github.com/THU-MAIC/OpenMAIC/security/advisories/GHSA-87m4-6c66-pc68) (reported by @ry2811)
+- `POST /api/generate/tts` now inspects a 200 response before storing or billing
+  it: HTML, JSON and other non-audio bodies are rejected, and a URL embedded in
+  a JSON envelope is never followed [#1405](https://github.com/THU-MAIC/OpenMAIC/pull/1405)
+
+### Breaking Changes
+
+- `POST /api/classroom` no longer honours a client-supplied `stage.id`; the `id` in the response is the classroom's id [#1489](https://github.com/THU-MAIC/OpenMAIC/pull/1489)
+- The outbound URL guard now refuses IANA reserved, documentation, multicast and broadcast ranges (`240.0.0.0/4`, `198.18.0.0/15`, `192.0.2.0/24`, `2001:db8::/32`, …) at both the URL and the connection layer, regardless of `ALLOW_LOCAL_NETWORKS`. CGNAT `100.64.0.0/10` (Tailscale and similar overlays) is blocked by default and allowed with `ALLOW_LOCAL_NETWORKS=true`, like private ranges [#1488](https://github.com/THU-MAIC/OpenMAIC/pull/1488)
+
+### Features
+
+- Playback: the global Reference courseware entry now grounds HTML-backed GenUI and Interactive scenes on one source-authored component — resolved again on the host against the request-start scene snapshot, sanitized and bounded, and shared with the Director and both child runtimes — behind the default-off `NEXT_PUBLIC_COURSEWARE_REFERENCE_ENABLED` build-time gate [#1281](https://github.com/THU-MAIC/OpenMAIC/pull/1281)
+- Export: the export dialog checks render queue availability before compiling; a service that reports itself busy disables MP4 with a localized hint and a manual recheck, while ZIP and subtitle downloads stay available [#1455](https://github.com/THU-MAIC/OpenMAIC/pull/1455)
+- Media: under server-backed persistence, generated media is written through the asset pool first and the allocated id is persisted into the document, so a reload regenerates nothing and other browsers resolve the same bytes [#1392](https://github.com/THU-MAIC/OpenMAIC/pull/1392)
+- Providers: add GLM-5.3 and GLM-5.3-Flash, and make the GLM thinking adapter degrade a disabled request to the lightest effort for always-thinking models [#1401](https://github.com/THU-MAIC/OpenMAIC/pull/1401)
+- Render service: emit one JSON lifecycle event per render and preview transition — submission, start with `queueWaitMs`, finish with its outcome and duration, admission rejection, and preview request — carrying only bounded, low-cardinality fields [#1397](https://github.com/THU-MAIC/OpenMAIC/pull/1397)
+
+### Bug Fixes
+
+- TTS: prepare the next discussion segment while the current clip plays, so synthesis latency overlaps playback while audio stays strictly ordered [#1435](https://github.com/THU-MAIC/OpenMAIC/pull/1435)
+- Export: keep one in-memory compiled ZIP so an unchanged retry after a 429 submits the same result instead of recompiling [#1456](https://github.com/THU-MAIC/OpenMAIC/pull/1456)
+- AI runtime: let non-streaming LLM calls outlive undici's 300 s headers timeout through a shared dispatcher with a 15-minute limit [#1404](https://github.com/THU-MAIC/OpenMAIC/pull/1404); share one process-local thinking context across Next.js bundle evaluations [#1378](https://github.com/THU-MAIC/OpenMAIC/pull/1378)
+- Importer: convert Equation 3.0 and MathType OLE formulas to LaTeX through MTEF v3 with degrade telemetry, and fix the non-transparent formula placeholder [#1411](https://github.com/THU-MAIC/OpenMAIC/pull/1411); stop PPTX import from hanging in non-browser environments by bounding image loading and EMF/PDF rasterization [#1424](https://github.com/THU-MAIC/OpenMAIC/pull/1424)
+- Quiz: resolve AI answer keys to option values before grading, failing closed when a key matches no option or several [#1328](https://github.com/THU-MAIC/OpenMAIC/pull/1328)
+- Renderer: lazy-load the optional ECharts runtime, share one loading promise and wait for chart readiness during slide PNG export [#1420](https://github.com/THU-MAIC/OpenMAIC/pull/1420)
+- Render service: keep preview browser evaluation self-contained so `tsx`'s `__name` helper never reaches Chromium [#1421](https://github.com/THU-MAIC/OpenMAIC/pull/1421); enforce the chunk worker cap and report the worker count actually observed [#1359](https://github.com/THU-MAIC/OpenMAIC/pull/1359)
+- Materials: sanitize the owner id in the byte-store key so uploads work on Windows [#1426](https://github.com/THU-MAIC/OpenMAIC/pull/1426)
+- Settings: read `data.error` for image and video provider test results instead of rendering `failed: undefined` [#1459](https://github.com/THU-MAIC/OpenMAIC/pull/1459)
+- Classroom: adapt the completion page to short viewports instead of clipping its content above the scroll origin [#1461](https://github.com/THU-MAIC/OpenMAIC/pull/1461)
+- Build: include the libvips native libraries in standalone tracing so sharp loads at boot [#1407](https://github.com/THU-MAIC/OpenMAIC/pull/1407)
+
+### Other Changes
+
+- CI: add an opt-in issue triage agent that analyzes read-only by default and publishes only on an explicit run [#1439](https://github.com/THU-MAIC/OpenMAIC/pull/1439)
+- Docs: state the advisory severity and CVE process in the security policy [#1417](https://github.com/THU-MAIC/OpenMAIC/pull/1417)
+- Tests: cover preview callbacks across the `tsx`/browser boundary [#1454](https://github.com/THU-MAIC/OpenMAIC/pull/1454); make the material search budget test deterministic through an injectable clock [#1453](https://github.com/THU-MAIC/OpenMAIC/pull/1453)
+
+## [1.0.1] - 2026-09-06
+
+A security and stability release. Everyone running 1.0.0 should upgrade; read the
+Breaking Changes section first, as this release tightens two defaults.
+
+### Security
+
+- Classroom persistence rejected a stage id that escaped the classrooms directory
+  only on the read path. The write path now applies the same allowlist, and the
+  storage layer asserts a resolved classroom file stays inside `CLASSROOMS_DIR`
+  [GHSA-p2wh-m28m-c5xw](https://github.com/THU-MAIC/OpenMAIC/security/advisories/GHSA-p2wh-m28m-c5xw) (reported by @skeletonsec)
+- Stored slide HTML is now restricted to the formatting vocabulary the renderer
+  produces, sanitized at the classroom persistence boundary on both write and read,
+  with a separate policy for KaTeX snapshots so formulas are not flattened
+  [GHSA-7rhf-2798-mvcj](https://github.com/THU-MAIC/OpenMAIC/security/advisories/GHSA-7rhf-2798-mvcj) (reported by @skeletonsec)
+- The outbound URL guard ran only under `NODE_ENV=production`; it now runs at every
+  call site in every environment, and a repository-scanning test fails if a gated
+  call site reappears
+  [GHSA-9m7h-vh2h-rc3w](https://github.com/THU-MAIC/OpenMAIC/security/advisories/GHSA-9m7h-vh2h-rc3w) (reported by @uziii2208)
+- Provider requests now re-validate every redirect hop through a shared transport
+  and drop credential headers on a cross-origin hop, the way the platform fetch does
+  [GHSA-725p-44hx-v52c](https://github.com/THU-MAIC/OpenMAIC/security/advisories/GHSA-725p-44hx-v52c) (reported by @skeletonsec)
+- The development persistence authenticator is refused under `NODE_ENV=production`
+  unless an explicit opt-in is set; it provides no user isolation and was never
+  meant to serve production traffic
+- Bump next, js-yaml, undici, nanoid, lodash and sharp for disclosed advisories [#1357](https://github.com/THU-MAIC/OpenMAIC/pull/1357)
+- Bound skill zip inflation instead of trusting the declared uncompressed size [#1374](https://github.com/THU-MAIC/OpenMAIC/pull/1374), and bound `import_pptx` parsing with a size cap and timeout [#1269](https://github.com/THU-MAIC/OpenMAIC/pull/1269)
+
+### Breaking Changes
+
+- Node: the minimum supported runtime is now 22.19.0, up from 20.9.0 [#1337](https://github.com/THU-MAIC/OpenMAIC/pull/1337)
+- The outbound URL guard now runs in every environment, not only production builds. A client-supplied provider base URL pointing at a loopback or private address — a local Ollama or Lemonade endpoint entered in Settings, for example — is rejected unless `ALLOW_LOCAL_NETWORKS=true` is set. Production deployments already behaved this way; development builds did not
+- Redirect hops are re-validated for every provider, including server-managed ones. An internal gateway that answers a redirect to a private address needs `ALLOW_LOCAL_NETWORKS=true`
+- The development persistence authenticator no longer serves traffic under `NODE_ENV=production`. A deployment that intentionally runs it on a trusted network must set `PERSISTENCE_ALLOW_INSECURE_DEV_AUTH=true`
+- `POST /api/classroom` now rejects a payload whose scenes do not satisfy the slide DSL, and a stage id outside `[A-Za-z0-9_-]`
+
+### Features
+
+- Agent: add a fact-check skill [#1274](https://github.com/THU-MAIC/OpenMAIC/pull/1274); let `generate_scene` pass `widgetType` and `widgetOutline` for interactive pages [#1259](https://github.com/THU-MAIC/OpenMAIC/pull/1259); make `generate_video` asynchronous with a placeholder reference [#1267](https://github.com/THU-MAIC/OpenMAIC/pull/1267)
+- Pro workbench: reference single PPT elements from chat [#1224](https://github.com/THU-MAIC/OpenMAIC/pull/1224); generate concise conversation titles [#1275](https://github.com/THU-MAIC/OpenMAIC/pull/1275)
+- Render service: add a `POST /preview` endpoint [#1285](https://github.com/THU-MAIC/OpenMAIC/pull/1285); report admission state machine-readably, with 429 reasons and an accepting flag on health [#1351](https://github.com/THU-MAIC/OpenMAIC/pull/1351)
+- Providers: add Exa as a web-search provider [#1342](https://github.com/THU-MAIC/OpenMAIC/pull/1342); register `deepseek-v4-flash-vision-exp` with vision capability [#1329](https://github.com/THU-MAIC/OpenMAIC/pull/1329)
+- Canvas: insert text by double-click [#1310](https://github.com/THU-MAIC/OpenMAIC/pull/1310)
+
+### Bug Fixes
+
+- Classroom: speed up loading through media hydration, sidebar thumbnails and media range requests [#1276](https://github.com/THU-MAIC/OpenMAIC/pull/1276); keep bottom table rows visible during playback [#1366](https://github.com/THU-MAIC/OpenMAIC/pull/1366); keep videos playing inline on mobile [#1321](https://github.com/THU-MAIC/OpenMAIC/pull/1321)
+- Agent runtime: preserve `generate_scene` failure causes [#1316](https://github.com/THU-MAIC/OpenMAIC/pull/1316); bound `generate_scene` retries per page [#1370](https://github.com/THU-MAIC/OpenMAIC/pull/1370); normalize skill paths to POSIX before the loader [#1297](https://github.com/THU-MAIC/OpenMAIC/pull/1297)
+- Workbench: handle stale workspace resume memory [#1271](https://github.com/THU-MAIC/OpenMAIC/pull/1271); persist Pro conversation titles [#1273](https://github.com/THU-MAIC/OpenMAIC/pull/1273); render LaTeX in assistant messages [#1309](https://github.com/THU-MAIC/OpenMAIC/pull/1309)
+- Generation: assign unique IDs per media request [#1368](https://github.com/THU-MAIC/OpenMAIC/pull/1368); load micropip before generated imports [#1282](https://github.com/THU-MAIC/OpenMAIC/pull/1282); keep diagram node position off the hover transform [#1339](https://github.com/THU-MAIC/OpenMAIC/pull/1339); normalize GPT Image 2 generation sizes [#1346](https://github.com/THU-MAIC/OpenMAIC/pull/1346)
+- Providers and media: apply server-pinned models for image and video providers [#1298](https://github.com/THU-MAIC/OpenMAIC/pull/1298); bypass the AI SDK for custom ASR providers so extra response fields survive [#1283](https://github.com/THU-MAIC/OpenMAIC/pull/1283); turn TTS and media generation on from the Settings page [#1311](https://github.com/THU-MAIC/OpenMAIC/pull/1311)
+- Storage: prune redundant intermediate `message_update` frames [#1279](https://github.com/THU-MAIC/OpenMAIC/pull/1279)
+- DSL: migrate away legacy rotate/height fields on line elements [#1261](https://github.com/THU-MAIC/OpenMAIC/pull/1261)
+- Export: recheck script readiness on download [#1159](https://github.com/THU-MAIC/OpenMAIC/pull/1159)
+- Importer: fix `pnpm install` failing on Windows [#1372](https://github.com/THU-MAIC/OpenMAIC/pull/1372)
+- Docs site: isolate the standalone build from product middleware [#1307](https://github.com/THU-MAIC/OpenMAIC/pull/1307)
+
+### Other Changes
+
+- Build and tooling: enforce the direct dependency engine floor [#1337](https://github.com/THU-MAIC/OpenMAIC/pull/1337); enforce LF line endings for text files [#1296](https://github.com/THU-MAIC/OpenMAIC/pull/1296); replace `rm -rf` with a cross-platform `fs.rmSync` in package scripts [#1338](https://github.com/THU-MAIC/OpenMAIC/pull/1338)
+- CI: migrate GitHub Actions off the deprecated Node 20 runtime [#1343](https://github.com/THU-MAIC/OpenMAIC/pull/1343)
+- Docs: sync the README with current code, multi-workbench skill support and the 1.0 videos [#1334](https://github.com/THU-MAIC/OpenMAIC/pull/1334); swap the English and Chinese user-guide links in the README badges [#1290](https://github.com/THU-MAIC/OpenMAIC/pull/1290)
+- Tests: isolate the media force-off test from the OpenAI fallback [#1303](https://github.com/THU-MAIC/OpenMAIC/pull/1303)
+
 ## [1.0.0] - 2026-08-27
 
 ### Features

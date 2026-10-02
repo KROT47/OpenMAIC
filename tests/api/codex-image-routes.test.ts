@@ -75,6 +75,14 @@ vi.mock('@/lib/server/provider-config', () => ({
 
 vi.mock('@/lib/server/ssrf-guard', () => ({
   validateUrlForSSRF: mocks.validateUrl,
+  validateClientBaseUrl: mocks.validateUrl,
+}));
+
+vi.mock('@/lib/server/media-provider-fetch', () => ({
+  withMediaProviderFetch: (config: unknown) => ({
+    ...(config as object),
+    fetchImpl: mocks.strictFetch,
+  }),
 }));
 
 vi.mock('@/lib/server/strict-fetch', () => ({
@@ -328,7 +336,6 @@ describe('/api/generate/image Codex branch', () => {
     expect(mocks.genericGenerate.mock.calls[0]?.[0]).toMatchObject({
       fetchImpl: mocks.strictFetch,
     });
-    expect(mocks.strictClose).toHaveBeenCalledOnce();
   });
 
   it('rejects a trusted default endpoint unless the provider is server-configured', async () => {
@@ -416,7 +423,6 @@ describe('/api/verify-image-provider Codex branch', () => {
     expect(mocks.genericConnectivity.mock.calls[0]?.[0]).toMatchObject({
       fetchImpl: mocks.strictFetch,
     });
-    expect(mocks.strictClose).toHaveBeenCalledOnce();
   });
 
   it('rejects an unmanaged trusted default endpoint before probing it', async () => {

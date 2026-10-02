@@ -7,7 +7,7 @@ OpenMAIC — это приложение на Next.js, которое можно
 
 ## Предварительные требования
 
-- **Node.js** версии 20.9.0 или выше
+- **Node.js** версии 22.19.0 или выше
 - **pnpm** версии 10.28.0 (если не установлен, выполните `npm install -g pnpm@10.28.0`)
 - Настроить как минимум одного LLM-провайдера; облачные провайдеры обычно требуют API key, локальные Ollama или Lemonade — нет
 
@@ -45,6 +45,16 @@ OLLAMA_BASE_URL=http://localhost:11434/v1
 
 ## Запуск
 
+Курсы хранятся в PostgreSQL, и без `DATABASE_URL` сервер отказывается запускаться. Запустите локальную базу для разработки (отдельный PostgreSQL в Docker на `127.0.0.1:5432`, общий для всех копий репозитория на этой машине; другой порт задаётся `OPENMAIC_DB_PORT`) и задайте `DATABASE_URL` в `.env.local`:
+
+```bash
+pnpm db:up
+```
+
+```bash title=".env.local"
+DATABASE_URL=postgres://openmaic:openmaic-dev@127.0.0.1:5432/openmaic
+```
+
 Запустите сервер разработки:
 
 ```bash
@@ -57,7 +67,7 @@ pnpm dev
 
 ```bash
 pnpm build
-pnpm start
+DATABASE_URL=postgres://... pnpm start
 ```
 
 Также можно развернуть OpenMAIC на Vercel, Docker или собственном сервере — см. [Руководство по развертыванию](./deployment.mdx).

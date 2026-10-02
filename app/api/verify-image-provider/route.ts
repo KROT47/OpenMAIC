@@ -27,9 +27,9 @@ import {
 import type { ImageProviderId } from '@/lib/media/types';
 import { apiError, apiSuccess } from '@/lib/server/api-response';
 import { createLogger } from '@/lib/logger';
-import { validateUrlForSSRF } from '@/lib/server/ssrf-guard';
+import { validateClientBaseUrl } from '@/lib/server/ssrf-guard';
+import { withMediaProviderFetch } from '@/lib/server/media-provider-fetch';
 import { getServerImageRouteAdapter } from '@/lib/server/providers/image-route-adapters';
-import { createStrictFetchTransport } from '@/lib/server/strict-fetch';
 
 const log = createLogger('VerifyImageProvider');
 
@@ -67,8 +67,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (clientBaseUrl && process.env.NODE_ENV === 'production') {
-      const ssrfError = await validateUrlForSSRF(clientBaseUrl);
+    if (clientBaseUrl) {
+      const ssrfError = await validateClientBaseUrl(clientBaseUrl);
       if (ssrfError) {
         return apiError('INVALID_URL', 403, ssrfError);
       }
@@ -92,19 +92,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const transport = clientBaseUrl ? createStrictFetchTransport() : undefined;
-    let result;
-    try {
-      result = await testImageConnectivity({
-        providerId,
-        apiKey,
-        baseUrl,
-        model,
-        fetchImpl: transport?.fetch,
-      });
-    } finally {
-      await transport?.close().catch(() => undefined);
-    }
+    // Every probe request runs on the pinned provider transport; the adapters'
+    // result messages are fixed text (no provider body, no transport detail).
+    const result = await testImageConnectivity(
+      withMediaProviderFetch({ providerId, apiKey, baseUrl, model }, managed),
+    );
 
     if (!result.success) {
       return apiError('UPSTREAM_ERROR', 500, result.message);
@@ -113,6 +105,6 @@ export async function POST(request: NextRequest) {
     return apiSuccess({ message: result.message });
   } catch (err) {
     log.error(`Image provider verification failed: ${err}`, err);
-    return apiError('INTERNAL_ERROR', 500, `Connectivity test error: ${err}`);
+    return apiError('INTERNAL_ERROR', 500, 'Connectivity test error');
   }
 }

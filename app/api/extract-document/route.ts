@@ -22,9 +22,13 @@ import {
   resolveServerAsset,
   type ServerAssetResolution,
 } from '@/lib/persistence/resolve-server-asset';
+import { attachOwnerCookies } from '@/lib/server/identity/with-owner';
 import { apiError, apiSuccess } from '@/lib/server/api-response';
+import {
+  checkClientDocumentExtractorBaseUrl,
+  checkClientMediaExtractorBaseUrl,
+} from '@/lib/server/client-extractor-endpoint';
 import { MAX_EXTRACT_DOCUMENT_FILE_SIZE_BYTES } from '@/lib/constants/generation';
-import { parseCappedFormData, UploadTooLargeError } from '@/lib/server/capped-stream';
 
 // The asset-id path resolves bytes from the server asset store, which lives in
 // the PostgreSQL persistence backend; it needs the Node runtime, not the edge.
@@ -252,13 +256,15 @@ async function runExtraction(
     // a YAML-only deployment works — the client-level env fallback reads env
     // vars only. Client-entered creds are used only when unmanaged.
     const mediaManagedCreds = mediaManaged ? resolveManagedAliDocMindCredentials() : undefined;
-    const mediaClientBaseUrl = mediaManaged ? undefined : requestConfig.baseUrl || undefined;
+    let mediaClientBaseUrl = mediaManaged ? undefined : requestConfig.baseUrl || undefined;
+    // A client-supplied media extractor endpoint must pass the extractor's
+    // endpoint rule (see checkClientMediaExtractorBaseUrl).
     if (mediaClientBaseUrl) {
-      return apiError(
-        'INVALID_URL',
-        403,
-        'Custom media extractor base URLs must be configured by the server operator',
-      );
+      const checked = checkClientMediaExtractorBaseUrl(mediaClientBaseUrl);
+      if (!checked.ok) {
+        return apiError('INVALID_URL', 403, checked.message);
+      }
+      mediaClientBaseUrl = checked.baseUrl;
     }
     const mediaArtifact = await extractMedia({
       buffer,
@@ -383,11 +389,11 @@ async function runExtraction(
     }
   }
   if (clientBaseUrl) {
-    return apiError(
-      'INVALID_URL',
-      403,
-      'Custom document extractor base URLs must be configured by the server operator',
-    );
+    const checked = await checkClientDocumentExtractorBaseUrl(provider.id, clientBaseUrl);
+    if (!checked.ok) {
+      return apiError('INVALID_URL', 403, checked.message);
+    }
+    clientBaseUrl = checked.baseUrl;
   }
 
   // For a managed AliDocMind provider, resolve server-owned AK/SK (env OR
@@ -411,6 +417,7 @@ async function runExtraction(
     // Env fallback is a last resort for a managed provider (defensive; the
     // resolver already covers env+YAML).
     allowEnvFallback: managed,
+    managed,
   };
 
   const artifact = await provider.extract({
@@ -437,7 +444,20 @@ async function runExtraction(
   return apiSuccess({ data: resultWithMetadata });
 }
 
-export async function POST(req: NextRequest) {
+export async function POST(req: NextRequest): Promise<Response> {
+  const ownerCookies: OwnerCookies = {};
+  // The asset-id form resolves the request owner: every answer after that,
+  // success or error, carries the resolution's cookies (the anonymous
+  // owner's renewal).
+  return attachOwnerCookies(await extract(req, ownerCookies), ownerCookies.setCookies);
+}
+
+/** Filled in once the asset-id form has resolved the request owner. */
+interface OwnerCookies {
+  setCookies?: readonly string[];
+}
+
+async function extract(req: NextRequest, ownerCookies: OwnerCookies): Promise<Response> {
   const logState: ExtractLogState = {};
   // Whether this request took the asset-id (JSON) form. The multipart byte
   // form's observable behavior is frozen; a few JSON-path-only responses use
@@ -452,10 +472,7 @@ export async function POST(req: NextRequest) {
       // Legacy byte form: the client uploads the original bytes, used by
       // browser-backed (self-deploy) pools where the server cannot resolve a
       // browser-side asset.
-      const formData = await parseCappedFormData(
-        req,
-        MAX_EXTRACT_DOCUMENT_FILE_SIZE_BYTES + 1024 * 1024,
-      );
+      const formData = await req.formData();
       const documentFile = (formData.get('file') || formData.get('pdf')) as File | null;
       requestConfig = {
         providerId: (formData.get('providerId') as string | null) ?? undefined,
@@ -535,9 +552,10 @@ export async function POST(req: NextRequest) {
       try {
         resolution = await resolveServerAsset(
           body.assetId,
-          req.headers,
+          req,
           MAX_EXTRACT_DOCUMENT_FILE_SIZE_BYTES,
         );
+        ownerCookies.setCookies = resolution.setCookies;
       } catch (error) {
         // A failure from the server asset store (DB outage, registry failure)
         // must not reach the client as raw `error.message`; log the real error
@@ -560,7 +578,7 @@ export async function POST(req: NextRequest) {
         return apiError(
           'UNAUTHENTICATED',
           401,
-          'Asset-id extraction requires server persistence credentials.',
+          'Asset-id extraction requires a valid owner credential.',
         );
       }
       if (resolution.status === 'missing') {
@@ -636,15 +654,6 @@ export async function POST(req: NextRequest) {
 
     return await runExtraction(source, requestConfig, logState, isAssetIdForm);
   } catch (error) {
-    if (error instanceof UploadTooLargeError) {
-      return apiError(
-        'INVALID_REQUEST',
-        413,
-        `Course material file is too large. Maximum size is ${Math.floor(
-          MAX_EXTRACT_DOCUMENT_FILE_SIZE_BYTES / 1024 / 1024,
-        )}MB.`,
-      );
-    }
     log.error(
       `Document extraction failed [provider=${logState.resolvedProviderId ?? 'unknown'}, file="${sanitizeLogValue(
         logState.fileName ?? 'unknown',

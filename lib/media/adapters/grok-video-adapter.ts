@@ -16,12 +16,15 @@
  */
 
 import type {
+  MediaProviderFetch,
   VideoGenerationConfig,
   VideoGenerationOptions,
   VideoGenerationResult,
 } from '../types';
+import { mediaFetchFor } from '../media-fetch';
 import { probeAuth } from '../probe-auth';
 import { runPolledTask } from '../polled-task';
+import { assertNotRedirected } from '../redirect-guard';
 import { requireModel } from '../require-model';
 
 const DEFAULT_MODEL = 'grok-imagine-video';
@@ -85,11 +88,10 @@ export async function testGrokVideoConnectivity(
   config: VideoGenerationConfig,
 ): Promise<{ success: boolean; message: string }> {
   const baseUrl = config.baseUrl || DEFAULT_BASE_URL;
-  const fetchImpl = config.fetchImpl ?? fetch;
   return probeAuth({
     providerName: 'Grok Video',
     request: () =>
-      fetchImpl(`${baseUrl}/videos/generations`, {
+      mediaFetchFor(config)(`${baseUrl}/videos/generations`, {
         method: 'POST',
         redirect: 'manual',
         headers: apiHeaders(config.apiKey),
@@ -106,11 +108,11 @@ export async function testGrokVideoConnectivity(
 // ---------------------------------------------------------------------------
 
 async function submitVideoGeneration(
+  fetchImpl: MediaProviderFetch,
   baseUrl: string,
   apiKey: string,
   model: string,
   options: VideoGenerationOptions,
-  fetchImpl: NonNullable<VideoGenerationConfig['fetchImpl']>,
 ): Promise<string> {
   const body: Record<string, unknown> = {
     model,
@@ -121,9 +123,12 @@ async function submitVideoGeneration(
 
   const response = await fetchImpl(`${baseUrl}/videos/generations`, {
     method: 'POST',
+    redirect: 'manual',
     headers: apiHeaders(apiKey),
     body: JSON.stringify(body),
   });
+
+  assertNotRedirected(response, 'Grok Video');
 
   if (!response.ok) {
     const text = await response.text();
@@ -143,15 +148,18 @@ async function submitVideoGeneration(
 // ---------------------------------------------------------------------------
 
 async function pollVideoStatus(
+  fetchImpl: MediaProviderFetch,
   baseUrl: string,
   apiKey: string,
   requestId: string,
-  fetchImpl: NonNullable<VideoGenerationConfig['fetchImpl']>,
 ): Promise<GrokVideoPollResponse> {
   const response = await fetchImpl(`${baseUrl}/videos/${requestId}`, {
     method: 'GET',
+    redirect: 'manual',
     headers: apiHeaders(apiKey),
   });
+
+  assertNotRedirected(response, 'Grok Video');
 
   if (!response.ok) {
     const text = await response.text();
@@ -171,15 +179,25 @@ export async function generateWithGrokVideo(
 ): Promise<VideoGenerationResult> {
   const model = requireModel(config.model, 'Grok Video');
   const baseUrl = config.baseUrl || DEFAULT_BASE_URL;
-  const fetchImpl = config.fetchImpl ?? fetch;
 
   return runPolledTask<VideoGenerationResult>({
     submit: async () => ({
       status: 'submitted',
-      taskId: await submitVideoGeneration(baseUrl, config.apiKey, model, options, fetchImpl),
+      taskId: await submitVideoGeneration(
+        mediaFetchFor(config),
+        baseUrl,
+        config.apiKey,
+        model,
+        options,
+      ),
     }),
     poll: async (requestId) => {
-      const result = await pollVideoStatus(baseUrl, config.apiKey, requestId, fetchImpl);
+      const result = await pollVideoStatus(
+        mediaFetchFor(config),
+        baseUrl,
+        config.apiKey,
+        requestId,
+      );
 
       if (result.status === 'done') {
         if (!result.video?.url) {

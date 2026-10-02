@@ -11,10 +11,8 @@ import {
 import type { ASRProviderId } from '@/lib/audio/types';
 import { createLogger } from '@/lib/logger';
 import { apiError, apiSuccess } from '@/lib/server/api-response';
-import { parseCappedFormData, UploadTooLargeError } from '@/lib/server/capped-stream';
+import { findUnsafeNetworkTargetError, validatePublicUrlForSSRF } from '@/lib/server/ssrf-guard';
 const log = createLogger('Transcription');
-
-const MAX_AUDIO_MULTIPART_BYTES = 51 * 1024 * 1024;
 
 export const maxDuration = 60;
 
@@ -22,7 +20,7 @@ export async function POST(req: NextRequest) {
   let resolvedProviderId: string | undefined;
   let resolvedModelId: string | undefined;
   try {
-    const formData = await parseCappedFormData(req, MAX_AUDIO_MULTIPART_BYTES);
+    const formData = await req.formData();
     const audioFile = formData.get('audio') as File;
     const providerId = formData.get('providerId') as ASRProviderId | null;
     // Trim the client model id and normalize empty → undefined, matching the
@@ -56,12 +54,15 @@ export async function POST(req: NextRequest) {
     // Managed providers are admin-owned: ignore any client-sent key/baseUrl.
     const managed = isServerConfiguredProvider('asr', effectiveProviderId);
     const clientBaseUrl = managed ? undefined : baseUrl || undefined;
+    // A client-supplied BYOK base URL is always judged under the strict public
+    // policy, even when the operator enabled local networks for their own
+    // server-configured ASR backend.
+    const publicOnly = Boolean(clientBaseUrl);
     if (clientBaseUrl) {
-      return apiError(
-        'INVALID_URL',
-        403,
-        'Custom ASR base URLs must be configured by the server operator',
-      );
+      const ssrfError = await validatePublicUrlForSSRF(clientBaseUrl);
+      if (ssrfError) {
+        return apiError('INVALID_URL', 403, ssrfError);
+      }
     }
 
     const config = {
@@ -74,6 +75,9 @@ export async function POST(req: NextRequest) {
       language: language || 'auto',
       apiKey: resolveASRApiKey(effectiveProviderId, managed ? undefined : apiKey || undefined),
       baseUrl: resolveASRBaseUrl(effectiveProviderId, clientBaseUrl),
+      publicOnly,
+      // A server-configured provider's endpoint may be on a local network.
+      managed,
     };
     // Reflect the resolved (possibly server-pinned) model in failure logs.
     resolvedModelId = config.modelId;
@@ -83,13 +87,14 @@ export async function POST(req: NextRequest) {
 
     return apiSuccess({ text: result.text });
   } catch (error) {
-    if (error instanceof UploadTooLargeError) {
-      return apiError('INVALID_REQUEST', 413, 'Audio upload is too large');
-    }
     log.error(
       `Transcription failed [provider=${resolvedProviderId ?? 'unknown'}, model=${resolvedModelId ?? 'default'}]:`,
       error,
     );
+    const blocked = findUnsafeNetworkTargetError(error);
+    if (blocked) {
+      return apiError('INVALID_URL', 403, blocked.message);
+    }
     return apiError(
       'TRANSCRIPTION_FAILED',
       500,

@@ -16,7 +16,9 @@ import type {
   ImageGenerationOptions,
   ImageGenerationResult,
 } from '../types';
+import { mediaFetchFor } from '../media-fetch';
 import { probeAuth } from '../probe-auth';
+import { assertNotRedirected } from '../redirect-guard';
 import { requireModel } from '../require-model';
 
 const DEFAULT_MODEL = 'qwen-image-max';
@@ -40,11 +42,10 @@ export async function testQwenImageConnectivity(
   config: ImageGenerationConfig,
 ): Promise<{ success: boolean; message: string }> {
   const baseUrl = config.baseUrl || DEFAULT_BASE_URL;
-  const fetchImpl = config.fetchImpl ?? fetch;
   return probeAuth({
     providerName: 'Qwen Image',
     request: () =>
-      fetchImpl(`${baseUrl}/api/v1/services/aigc/multimodal-generation/generation`, {
+      mediaFetchFor(config)(`${baseUrl}/api/v1/services/aigc/multimodal-generation/generation`, {
         method: 'POST',
         redirect: 'manual',
         headers: {
@@ -65,12 +66,12 @@ export async function generateWithQwenImage(
   options: ImageGenerationOptions,
 ): Promise<ImageGenerationResult> {
   const baseUrl = config.baseUrl || DEFAULT_BASE_URL;
-  const fetchImpl = config.fetchImpl ?? fetch;
 
-  const response = await fetchImpl(
+  const response = await mediaFetchFor(config)(
     `${baseUrl}/api/v1/services/aigc/multimodal-generation/generation`,
     {
       method: 'POST',
+      redirect: 'manual',
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${config.apiKey}`,
@@ -98,6 +99,8 @@ export async function generateWithQwenImage(
       }),
     },
   );
+
+  assertNotRedirected(response, 'Qwen Image');
 
   if (!response.ok) {
     const text = await response.text();

@@ -52,10 +52,12 @@ describe('Codex image settings surface contract', () => {
     const source = read('components/settings/index.tsx');
 
     expect(source).toMatch(
-      /handleManageCodexLogin[\s\S]*setActiveSection\('providers'\)[\s\S]*setSelectedProviderId\('openai-codex'\)/,
+      /handleManageCodexLogin[\s\S]*setActiveSection\('model-services'\)[\s\S]*setServiceTab\('providers'\)[\s\S]*setSelectedProviderId\('openai-codex'\)/,
     );
     expect(source).toContain('onManageCodexLogin={handleManageCodexLogin}');
-    expect(source).toContain("'codex-image': 'providerCodexImage'");
+    expect(read('components/settings/media-provider-names.ts')).toContain(
+      "'codex-image': 'providerCodexImage'",
+    );
     expect(source).toContain("'codex-image': '/logos/openai.svg'");
   });
 
@@ -65,12 +67,12 @@ describe('Codex image settings surface contract', () => {
     if (!existsSync(availabilityPath)) return;
 
     const availability = readFileSync(availabilityPath, 'utf8');
-    const popover = read('components/generation/media-popover.tsx');
+    const popover = read('components/settings/course-model-config.tsx');
     expect(availability).toContain("credentialMode === 'oauth'");
     expect(availability).toContain('isServerConfigured === true');
     expect(popover).toContain('isImageProviderAvailable');
-    expect(popover).toContain("'codex-image': '/logos/openai.svg'");
-    expect(popover).toMatch(/credentialMode === 'oauth'\s*\?\s*p\.models/);
+    expect(read('components/settings/index.tsx')).toContain("'codex-image': '/logos/openai.svg'");
+    expect(popover).toContain('getImageProviderCredentialMode');
   });
 
   it('defines every Codex image key in all eight locales', () => {

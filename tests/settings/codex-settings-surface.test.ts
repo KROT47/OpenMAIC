@@ -57,14 +57,12 @@ describe('Codex settings surface contract', () => {
     );
     expect(source).toMatch(/credentialMode:\s*config\.credentialMode/);
     expect(source).toMatch(
-      /const\s+isCodexProviderSurface\s*=\s*activeSection === 'providers'\s*&&\s*selectedProviderId === 'openai-codex'/,
+      /serviceSection === 'providers'[\s\S]*selectedProviderId === 'openai-codex'/,
     );
     expect(source).toMatch(
-      /const\s+isManagedSettingsSurface\s*=\s*isCodexProviderSurface \|\| isCodexImageSurface/,
+      /serviceSection === 'providers'[\s\S]*selectedProviderId !== 'openai-codex'[\s\S]*<ProviderConfigPanel/,
     );
-    expect(source).toMatch(
-      /\{!isManagedSettingsSurface\s*&&\s*\(\s*<Button size="sm" onClick=\{handleSave\}>/,
-    );
+    expect(source).not.toContain('onClick={handleSave}');
   });
 
   it('re-fetches server providers after access-code unlock', () => {
