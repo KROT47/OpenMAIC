@@ -1352,6 +1352,10 @@ describe('server-backed classic media orchestrator', () => {
     const commitInFlight = new Promise<void>((resolve) => {
       releaseCommit = resolve;
     });
+    let markCommitStarted!: () => void;
+    const commitStarted = new Promise<void>((resolve) => {
+      markCommitStarted = resolve;
+    });
     let overlapping: Promise<void> | undefined;
     let callsWhenOverlappingStarted = 0;
     // The retry path re-enters generation while the first pass is mid-commit.
@@ -1362,21 +1366,25 @@ describe('server-backed classic media orchestrator', () => {
         // call returns.
         callsWhenOverlappingStarted = providerCallCount();
         overlapping = generateMediaForOutlines(outlines, stageId);
+        markCommitStarted();
         await commitInFlight;
       }
       return 'ast_generated';
     });
 
     const first = generateMediaForOutlines(outlines, stageId);
+    await commitStarted;
     // Give the second pass every chance to run: if it were not waiting, its
     // collection loop is synchronous and element two is only `pending`, so it
     // would have called the provider by now.
     for (let tick = 0; tick < 50; tick += 1) await Promise.resolve();
-    expect(providerCallCount()).toBe(callsWhenOverlappingStarted);
-
-    releaseCommit?.();
-    await first;
-    await overlapping;
+    try {
+      expect(providerCallCount()).toBe(callsWhenOverlappingStarted);
+    } finally {
+      releaseCommit?.();
+      await first;
+      await overlapping;
+    }
   });
 
   // The handoff the retry path actually performs: abort the live pass and start
@@ -1401,12 +1409,17 @@ describe('server-backed classic media orchestrator', () => {
     const firstInFlight = new Promise<void>((resolve) => {
       releaseFirst = resolve;
     });
+    let markProviderStarted!: () => void;
+    const providerStarted = new Promise<void>((resolve) => {
+      markProviderStarted = resolve;
+    });
     let calls = 0;
     fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
       const url = String(input);
       if (url === '/api/generate/image') {
         calls += 1;
         if (calls === 1) {
+          markProviderStarted();
           await firstInFlight;
           throw Object.assign(new Error('Aborted'), { name: 'AbortError' });
         }
@@ -1423,8 +1436,7 @@ describe('server-backed classic media orchestrator', () => {
 
     const first = new AbortController();
     const pass1 = generateMediaForOutlines(outlines, stageId, first.signal).catch(() => undefined);
-    await Promise.resolve();
-    await Promise.resolve();
+    await providerStarted;
 
     // Verbatim what the retry path does, in one synchronous block.
     first.abort();

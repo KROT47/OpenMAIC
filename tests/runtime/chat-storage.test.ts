@@ -132,6 +132,9 @@ async function runtimeChatRecords(store: RuntimeStore): Promise<RuntimeRecord[]>
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // Exercise the fallback path unless a test explicitly supplies Web Locks.
+  // Node 24 exposes navigator.locks even in this non-browser environment.
+  vi.stubGlobal('navigator', { locks: undefined });
 });
 
 afterEach(() => {
